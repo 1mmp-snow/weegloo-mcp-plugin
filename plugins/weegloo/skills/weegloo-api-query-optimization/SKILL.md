@@ -1,6 +1,6 @@
 ---
 name: weegloo-api-query-optimization
-description: Weegloo list APIs - projection with select (include/exclude, object paths), list-as-single via sys.id, batch fetch with sys.id[in], prefetch sys.version for PATCH/PUT, and CMA Media mimeGroups filtering. Use to shrink payloads, avoid redundant reference expansion, and replace N single GETs with one list call. ALSO covers the master/detail pattern (lightweight list/sidebar + on-click single-Content detail fetch) and resolving a Refer→Media image/file field to a displayable URL — use when building a history list, gallery, inbox, or any list-then-open-item UI.
+description: Weegloo list APIs - projection with select (include/exclude, object paths), list-as-single via sys.id, batch fetch with sys.id[in], prefetch sys.version for PATCH/PUT, and CMA Media mimeGroups filtering. Use to shrink payloads, avoid redundant reference expansion, and replace N single GETs with one list call. ALSO covers the two list-driven UI patterns — master/detail (lightweight list/sidebar + on-click single-Content detail fetch) and all-rows-have-images (gallery/card grid that resolves Media at the list level via `include`) — and resolving a Refer→Media image/file field to a displayable URL. Use when building a history list, inbox, search results, gallery, card grid, or any list-then-open-item UI.
 ---
 
 # Weegloo - query optimization for list APIs
@@ -125,17 +125,30 @@ On **CMA** **`GET .../spaces/{spaceId}/medias`**, add **`fields.file.{locale}.mi
 
 ---
 
-## 6. Master/detail UIs: lightweight list + on-select detail fetch (do NOT render a detail from the list)
+## 6. List-driven UIs: master/detail vs all-rows-have-images
 
-§2–§3 optimize **bulk** loading (one list instead of many GETs). They do **NOT** mean "render a
-detail or image view straight from the list response." A **list/sidebar → open an item** UI
-(history list, gallery, inbox, search results → item page) uses the **opposite** split, and getting
-this wrong is a common mistake:
+§2–§3 optimize **bulk** loading (one list instead of many GETs). They do **NOT** tell you how to
+render a UI from a list. Two list-driven UIs need **opposite** fetch strategies — decide which one
+you are building **before** you write the query:
+
+- **(A) Master/detail** — a lightweight list/sidebar whose rows are *labels*, where opening a row
+  reveals the rest (history list, inbox, search results → item page). The list stays small; image
+  and detail data load lazily **on click**.
+- **(B) All-rows-have-images** — a gallery, card grid, or cover/banner list where **every row must
+  itself show a thumbnail/cover**, often with no separate "open" step (or the same data backs both a
+  card and a banner). Here you resolve images **at the list level, on purpose**.
+
+Getting the split wrong is a common mistake in **both** directions: rendering full detail straight
+from a master/detail list, or — the opposite — forgetting `include=1` on a gallery list so every
+cover comes back as an unresolved `Refer` and renders blank.
+
+### (A) Master/detail: lightweight list + on-select detail fetch
 
 - **List (sidebar): fetch a lightweight projection per row** — `sys.id` plus the human-readable
   **label field you will display** (e.g. `fields.prompt`, `fields.title`). Use `select` to keep rows
-  small, and **always project and render a meaningful label**, never just an id or a thumbnail. A
-  sidebar/list that shows no title/prompt text is a defect, not an optimization.
+  small, and **always project and render a meaningful label**, never just a bare id. (A label-less
+  row of thumbnails is pattern **(B)**, not this — see below.) A master/detail sidebar that shows no
+  title/prompt text is a defect, not an optimization.
 - **Detail (on click): fetch that ONE Content by id, lazily.** Hit the single-Content endpoint for
   the selected item — `…/content-types/{contentTypeId}/contents/{contentId}` (on ACMA/ACDA always
   nested under the ContentType; see **`weegloo-api-endpoints`**). This lazy by-id GET is **correct
@@ -143,21 +156,37 @@ this wrong is a common mistake:
   **not** a reason to skip the detail fetch for the *one* item the user actually opened, nor to try
   to cram every row's full detail into the initial list call.
 
-### Rendering a referenced Media (image / file fields)
+**Rendering the selected item's Media (image / file fields).** A field that points at an asset (e.g.
+`fields.image1`…`fields.image4`, `fields.file`) is a **Refer → Media**, **not** a ready-to-use URL
+string. On the **detail** fetch, expand the reference (`?include=1`) — or follow up with a Media
+fetch — and read the file URL from the **Media's** `fields.file` (locale shape per
+**`weegloo-default-locale`**); confirm the Media is deliverable first (**`weegloo-media-lifecycle`**).
+In this pattern, **do not** try to render images straight from the master list: pulling every row's
+media up front defeats the lightweight-list goal, and the reliable place to read the image is the
+per-item detail fetch. (If every row genuinely needs its image, you are building pattern **(B)** —
+resolve at the list level instead.)
 
-A field that points at an asset (e.g. `fields.image1`…`fields.image4`, `fields.file`) is a
-**Refer → Media**, **not** a ready-to-use URL string. To show it you must **resolve the Media to its
-file URL**:
+### (B) All-rows-have-images: resolve Media at the list level with `include`
 
-- On the **detail** fetch, expand the reference (`?include=1`) — or follow up with a Media fetch —
-  and read the file URL from the **Media's** `fields.file.{locale}` per-locale bucket (default-locale
-  rules: **`weegloo-default-locale`**). Confirm the Media is deliverable first
-  (**`weegloo-media-lifecycle`**).
-- **Do NOT assume the list response already carries usable image URLs.** List-level expansion is not
-  guaranteed to resolve every Refer→Media into a deliverable URL, and pulling all rows' media up
-  front defeats the lightweight-list goal above. The reliable place to read image/file fields for
-  rendering is the **detail fetch of the selected item** — exactly the per-item
-  `…/contents/{contentId}` call, reading `fields.image1..N` → Media → file URL.
+When the UI requires a thumbnail/cover on **every** row (gallery, card grid, cover banner) and there
+is no separate detail fetch to defer to, resolving images from the list response is **correct — not
+an anti-pattern**. Do it deliberately:
+
+1. **Add `include=1` to the list call.** This is the most common omission: without it,
+   `fields.<refer>` comes back as a bare `sys.id` and every image renders blank.
+2. **Build a `{ mediaId → fileUrl }` map** from the response's sibling **`include.Media`** object
+   (singular `include`, PascalCase `Media`), then resolve each row's `fields.<refer>.sys.id` against
+   that map.
+3. **Read the file URL in the shape the plane returns** — flat `media.fields.file.url` on a default
+   **CDA/ACDA** delivery read, bucketed `media.fields.file[locale].url` on **management** (CMA/ACMA).
+   The exact `include.Media` shape and the flat-vs-bucket rule are documented in
+   **`weegloo-default-locale`** — follow it; do not re-derive it here.
+4. **Caveats still apply** (the kernel of the pattern-A warning):
+   - List-level `include` does **not** guarantee every `Refer` resolves to a deliverable URL —
+     confirm each Media is published/deliverable (**`weegloo-media-lifecycle`**) and handle rows
+     whose media is missing or still processing.
+   - You are pulling every row's media up front: that is the right trade-off **only** when the UI
+     actually shows all of them. For a label-first sidebar, use pattern **(A)**.
 
 ---
 
