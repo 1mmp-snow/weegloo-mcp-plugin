@@ -16,6 +16,7 @@ rules:
       - **MCP tools only** for deployment. No deploy scripts, no direct API calls.
       - **Subdomain is auto-chosen by the LLM — never ask the user.** Pick a **distinctive** subdomain that fits the service (not a plain common noun, which collides); the user can change it anytime later. After deploy, inform the user of the chosen subdomain and that it is changeable.
       - **`CheckSubdomain` before `CreateWebHosting`.** Always. On collision, auto-pick another distinctive variant and re-check — do not ask the user.
+      - **Navigation must not flicker.** A multi-page static site must not re-load the whole document on every internal link: intercept internal links, `history.pushState`, and swap **only the main content region** — render header/footer **once at boot**, not per navigation. Handle back/forward with `popstate`. Leave OAuth-callback and payment-return URLs as real document loads.
 
   - section: Full workflow
     items:
