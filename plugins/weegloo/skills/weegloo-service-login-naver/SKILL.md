@@ -27,9 +27,15 @@ that `ServiceLogin` needs. Everything else (the `auth.weegloo.com` wire protocol
 In the Naver Developers console, the **Callback URL** (under the **Naver Login** API settings) is, with
 the real `{spaceId}` substituted:
 
+```diff
++ https://auth.weegloo.com/v1/spaces/{spaceId}/login/oauth2/code/naver
 ```
-https://auth.weegloo.com/v1/spaces/{spaceId}/login/oauth2/code/naver
-```
+
+The leading **`+ `** renders the line green (`weegloo-global-rules` → *Highlight what the user
+must act on or must know*) and is **not part of the URI** — the **Callback URL** field takes the
+`https://…` text only. **Tell the user this URI up front, before you build**, not only when you
+ask for the credentials (`weegloo-service-login` → *Tell the user the provider Redirect URI UP
+FRONT*).
 
 - The `/code/` segment is required — it is the **Naver → Weegloo** callback, **not** the browser entry
   URL (`…/login/oauth2/naver`). Putting `/code/` in the entry URL, or the entry URL in this field,

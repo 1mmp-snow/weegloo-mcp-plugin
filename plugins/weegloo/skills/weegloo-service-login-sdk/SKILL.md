@@ -193,6 +193,20 @@ A first integrator wiring an **app that is not deployed yet** routinely stalls o
 
 So the deploy chicken-and-egg is only apparent: you can **always** finish the provider side and create the `ServiceLogin` immediately (placeholder `callbackUrl`), then update only `callbackUrl` post-deploy via `cma_UpdateOneServiceLogin` / `cma_PatchOneServiceLogin`. Do **not** block ServiceLogin creation on having a deployed URL, and do **not** put your app's `callbackUrl` into the provider's redirect-URI field (that is pitfall **A** again).
 
+**Because it is deploy-independent, hand it to the user BEFORE you start building — and again when
+you finish.** Registering it is a manual errand in a console you have no access to, and it is knowable
+as soon as the Space and provider are settled, so there is no reason to hold it back. Surface it at
+**both** ends:
+
+| When | What to say |
+|---|---|
+| **Up front** — the moment ServiceLogin enters the plan, before writing code | "Register this as the **Authorized redirect URI** in the `{provider}` console" + the URI with the real `spaceId` and provider filled in, in **green** (`weegloo-global-rules`). The user does that while you build. |
+| **At the end** — in the completion message | The same URI again, plus the now-real `callbackUrl` and the live app URL. The closing message is the record the user scrolls back to. |
+
+Announcing early **replaces neither** the end-of-run report **nor** the just-in-time credentials
+request below — those are separate. Rationale and the exact-paste caveat: `weegloo-service-login`
+→ *Tell the user the provider Redirect URI UP FRONT*.
+
 **But `callbackUrl` is the *only* part you may placeholder. `clientId` / `clientSecret` are blocking user-only inputs** — they come from the user's own OAuth client at the chosen provider and nobody else can supply them. Without them the `ServiceLogin` cannot be created and sign-in stays **inert**. So when you reach this step: **stop, ask the user for `clientId` / `clientSecret`, and create the `ServiceLogin`** — do **not** finish with only the `ServiceUserRole` created and the credentials written off as "add later." A role created but no `ServiceLogin` is **blocked-pending-input**: end the turn by *asking for the credentials*, not by reporting the login as done. (This is the just-in-time rule of `weegloo-platform-integration` step 4 — ask at this step, not earlier, not as a closing footnote.) **When you ask, don't ask bare** — hand the user the step-by-step console walkthrough for *their* provider, with the real `{spaceId}` filled into the redirect URI. If a dedicated provider skill exists (today **`weegloo-service-login-google`** for Google, **`weegloo-service-login-github`** for GitHub, **`weegloo-service-login-kakao`** for Kakao, **`weegloo-service-login-naver`** for Naver, **`weegloo-service-login-line`** for LINE), invoke and follow it; for a provider without one (Facebook, GitLab) follow the generic shape in *Configuration responsibilities* below and look up that provider's current console steps. Do **not** give one provider's steps for another, and do **not** try to load a provider skill that doesn't exist.
 
 ## Configuration responsibilities (provider console + Weegloo Console)

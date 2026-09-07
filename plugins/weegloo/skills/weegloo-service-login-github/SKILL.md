@@ -22,9 +22,15 @@ This is the **GitHub instance** of the provider-agnostic ServiceLogin setup. It 
 
 In the GitHub OAuth App, the **Authorization callback URL** is, with the real `{spaceId}` substituted:
 
+```diff
++ https://auth.weegloo.com/v1/spaces/{spaceId}/login/oauth2/code/github
 ```
-https://auth.weegloo.com/v1/spaces/{spaceId}/login/oauth2/code/github
-```
+
+The leading **`+ `** renders the line green (`weegloo-global-rules` → *Highlight what the user
+must act on or must know*) and is **not part of the URI** — the **Authorization callback URL** field takes the
+`https://…` text only. **Tell the user this URI up front, before you build**, not only when you
+ask for the credentials (`weegloo-service-login` → *Tell the user the provider Redirect URI UP
+FRONT*).
 
 - The `/code/` segment is required — it is the **GitHub → Weegloo** callback, **not** the browser entry
   URL (`…/login/oauth2/github`). Putting `/code/` in the entry URL, or the entry URL in this field,

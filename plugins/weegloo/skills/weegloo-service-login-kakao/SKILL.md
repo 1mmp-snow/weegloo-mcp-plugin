@@ -23,9 +23,15 @@ This is the **Kakao instance** of the provider-agnostic ServiceLogin setup. It c
 In the Kakao Developers console, the **Redirect URI** (under **Kakao Login**) is, with the real
 `{spaceId}` substituted:
 
+```diff
++ https://auth.weegloo.com/v1/spaces/{spaceId}/login/oauth2/code/kakao
 ```
-https://auth.weegloo.com/v1/spaces/{spaceId}/login/oauth2/code/kakao
-```
+
+The leading **`+ `** renders the line green (`weegloo-global-rules` → *Highlight what the user
+must act on or must know*) and is **not part of the URI** — the **Redirect URI** field takes the
+`https://…` text only. **Tell the user this URI up front, before you build**, not only when you
+ask for the credentials (`weegloo-service-login` → *Tell the user the provider Redirect URI UP
+FRONT*).
 
 - The `/code/` segment is required — it is the **Kakao → Weegloo** callback, **not** the browser entry
   URL (`…/login/oauth2/kakao`). Putting `/code/` in the entry URL, or the entry URL in this field,

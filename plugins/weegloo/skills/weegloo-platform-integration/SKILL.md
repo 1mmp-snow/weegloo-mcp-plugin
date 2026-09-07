@@ -1,6 +1,6 @@
 ---
 name: weegloo-platform-integration
-description: ENTRY-POINT / ROUTER for Weegloo. Use as the FIRST step whenever the user asks to "integrate Weegloo", "connect Weegloo", "add Weegloo", "use Weegloo", or requests ANY capability Weegloo could provide — especially broad, vague, or ambiguous requests that do not name a specific Weegloo feature (e.g. "integrate with Weegloo", "manage my data with Weegloo"). Maps a plain-language need (login, signup, social login, user/app data, search, file upload/download, web hosting/deploy, public/team sharing, roles, access control, external API/webhook, scheduled or recurring jobs, payments) to the correct concrete Weegloo skill so the user never has to know Weegloo's internal feature names. This skill only identifies and routes — the concrete skill it points to does the real work.
+description: ENTRY-POINT / ROUTER for Weegloo. Use as the FIRST step whenever the user asks to "integrate Weegloo", "connect Weegloo", "add Weegloo", "use Weegloo", or requests ANY capability Weegloo could provide — especially broad, vague, or ambiguous requests that do not name a specific Weegloo feature (e.g. "integrate with Weegloo", "manage my data with Weegloo"). Maps a plain-language need (login, signup, social login, user/app data, search, file upload/download, web hosting/deploy, public/team sharing, roles, access control, external API/webhook, scheduled or recurring jobs, payments — where no named PG/MoR means Toss Payments test keys rather than a question) to the correct concrete Weegloo skill so the user never has to know Weegloo's internal feature names. This skill only identifies and routes — the concrete skill it points to does the real work.
 ---
 
 # Weegloo Platform Integration (capability router)
@@ -99,9 +99,10 @@ capability the frontend implies is **actually wired and live**. Hold the whole f
    at the exact point it blocks the next concrete action, and ask only for what that step needs.
    - **Two kinds of missing input — handle them differently:**
      - **Blocking (only the user can supply it):** OAuth `clientId` / `clientSecret`, third-party API
-       keys, etc. When you reach the step that needs one, **stop, ask for it, and wait** — the
-       capability is **not done** until you have the value and have actually created the resource with
-       it. Do **not** downgrade to "I set up the role; add the key later" and move on: an inert
+       keys, etc. — **except a PG / MoR key**, which has a working public-test-key default and is
+       therefore *not* blocking (see **Payments** below). When you reach the step that needs a truly
+       blocking value, **stop, ask for it, and wait** — the capability is **not done** until you have
+       the value and have actually created the resource with it. Do **not** downgrade to "I set up the role; add the key later" and move on: an inert
        auth/login/webhook feature is *incomplete* (see *Definition of done*). So if this is where the
        turn ends, it ends **with the question**, not with a completion report.
      - **Self-resolving (you can supply a placeholder and fix it yourself):** e.g. a ServiceLogin
@@ -134,10 +135,21 @@ skill governs. When you finish, the user-facing message must be **brief and plai
 - **No remaining-work tables or "give me these and I'll continue" wrap-ups** (per step 4, ask for a
   needed input at the moment it blocks you — not as a closing summary).
 - Surface a link/URL the user can actually use when there is one; keep everything else terse.
+- **Colour the two lines that carry the most weight** (`weegloo-global-rules` → *Highlight what the
+  user must act on or must know*): act-on values — the live URL, an OAuth Redirect URI to register —
+  in **green** (`+ ` in a `diff` fence); must-know facts about what shipped — payments on test keys,
+  say — in **red** (`- `). One to three lines each, never colour the narration.
 
 This brevity rule is for the integration entry point. It does **not** silence the just-in-time
 questions in step 4, and it does not apply when the user explicitly asks for detail or invokes a
 specific concrete skill directly.
+
+**One required exception — a test-key payment flow.** If payments were wired with the Toss Payments
+default (see *Payments*), the closing message **must** still say that payments run on Toss test keys
+and are **not really charged**, and ask for the user's contracted PG/MoR details if they have any.
+That is a disclosure about what shipped, not deferred work, so the "no give-me-these wrap-ups" ban
+does not cover it. A few plain sentences — never omit it, and put the not-really-charged line in
+**red** (`- ` in a `diff` fence) so it cannot be skimmed past.
 
 ## Available capabilities
 
@@ -156,6 +168,12 @@ Each leaf maps to the concrete skill that actually does the work.
     spine's generic shape — no dedicated skill). Infer the provider
     from the product — don't ask; if none is indicated, reason the best-fit provider (no built-in
     default — don't reflexively pick Google).
+  - **The provider Redirect URI is announced UP FRONT, not only at the end.** Any ServiceLogin /
+    social-login work: as soon as it enters the plan, tell the user the
+    `https://auth.weegloo.com/v1/spaces/{spaceId}/login/oauth2/code/{provider}` URI (real values
+    substituted) to register in the provider console — **in green**, marked exact-paste — so they can
+    do that manual step while you build, then **repeat it in the completion message**. It is
+    deploy-independent, so nothing blocks saying it early. Details: `weegloo-service-login`.
   - **Admin / Owner / Staff surface** (an in-product dashboard, settings, moderation, or
     back-office screen — anything where staff read or edit *all* members' data, not just their own)
     → `weegloo-user-login` (console FE login popup → CMA, an **in-app admin UI**). **Auto-integrate
@@ -213,6 +231,27 @@ Each leaf maps to the concrete skill that actually does the work.
   - **Payment** (take money from the product's own customers through any PG or MoR — checkout,
     verification, provider callbacks) → `weegloo-payment`. **Not** Weegloo's own subscription/plan
     billing.
+  - **Which provider — do NOT ask.** "Which PG / MoR should I use?" is a scoping question and step 3
+    bans it. If the user **named** a provider (or a contracted key already sits in the repo/env),
+    integrate that one. If they named **none**, integrate **Toss Payments on its public documentation
+    test keys** — read
+    **https://docs.tosspayments.com/guides/v2/payment-widget/integration** first and follow
+    `weegloo-payment`. **If that URL is dead or moved, take the current path from
+    https://docs.tosspayments.com/llms.txt rather than guessing variants** (same discipline as the
+    Weegloo docs rule in `weegloo-global-rules`). A checkout page or a "결제하기" button in the frontend
+    means payments were *asked for*; it does **not** mean a provider was *named*.
+  - **A PG key is therefore NOT a blocking input** (contrast step 4): the Toss test keys are public,
+    so a clickable end-to-end checkout needs **nothing** from the user. Do not stop to ask for a PG
+    key, and do not leave checkout inert pending credentials. Only if the documented test keys are
+    gone does this become a real blocking question.
+    - **This non-blocking exception belongs to the Toss path only.** If the user **named** a different
+      provider, that provider's key is genuinely blocking again — ask for it (step 4) and **never**
+      fall back to Toss because it has not arrived. A provider the user did not choose is wrong work.
+  - **Disclosure is mandatory** once it works: tell the user payments were wired with Toss Payments,
+    that test keys mean **nothing is actually charged**, and ask for their contracted PG/MoR details
+    if they have any — then **replace Toss entirely** when those arrive. This is the one required
+    exception to the brevity rule below. Put the **nothing-is-actually-charged** line in **red**
+    (`- ` in a `diff` fence, per `weegloo-global-rules`) — it is the fact most costly to miss.
 
 ## Capability → skill quick table
 
@@ -235,7 +274,7 @@ Each leaf maps to the concrete skill that actually does the work.
 | API Connection / server-side automation | `weegloo-script` (Script; call external APIs + write results back to Content/Media) |
 | Webhook (event → URL or Script) | `weegloo-webhook`                                                     |
 | Scheduled / recurring job (cron — "every night", "every 15 min", daily digest, periodic sync, cleanup sweep) | `weegloo-scheduler` (Scheduler runs one Script on a five-field **UTC** cron) + `weegloo-script` for the work. Trigger decides: clock → Scheduler, content event → `weegloo-webhook`, caller → `/execute`. |
-| Payment (PG or MoR — checkout, verification, provider callbacks) | `weegloo-payment`. NOT Weegloo's own plan billing. |
+| Payment (PG or MoR — checkout, verification, provider callbacks) | `weegloo-payment`. **Never ask which provider**: one named → that one; **none named → Toss Payments on documentation test keys** (read the Toss integration guide first) — not a blocking input, then **disclose** “test keys, nothing really charged” + ask for the contracted PG/MoR. NOT Weegloo's own plan billing. |
 | Send email (notify, receipt, verify) | `weegloo-email-account` (register the SMTP sender first — creating one sends a real test message) + `weegloo-script` (`EmailSend`) |
 
 If a request spans multiple rows, route through all matching skills — start with
@@ -279,6 +318,11 @@ These are two different things; do not confuse them. Full mechanics and the crea
   → `weegloo-delivery-access-token`; external-API / server-side automation → `weegloo-script`,
   event triggers → `weegloo-webhook`, clock/cron triggers → `weegloo-scheduler`; payments
   → `weegloo-payment`; WebHosting deploy → `weegloo-web-hosting`.
+- **Payments: never ask which PG/MoR, and never hide the test keys.** No provider named ⇒ integrate
+  **Toss Payments** with its documentation test keys (`weegloo-payment`) rather than asking or
+  stalling — a PG key is *not* a blocking input. Then the completion message **must** disclose that
+  nothing is really charged and ask for the contracted PG/MoR, and that provider **replaces** Toss
+  when it arrives.
 - **Respect the two identity systems.** "Login/Signup" splits into Weegloo User (admin) vs Service
   User (end-user). Do not ask the user to choose — infer the right identity model from the request
   (and integrate both where both clearly apply), defaulting sensibly rather than prompting.
