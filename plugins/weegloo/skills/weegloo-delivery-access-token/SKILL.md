@@ -72,20 +72,7 @@ Do **not** treat Administrator as an acceptable workaround for **public, browser
 3. **`sys.id`** from the **create response** → pass into **`cma_CreateDeliveryAccessToken`** as **`role.sys.id`**.
 4. If step 3 fails with **`WGL422001`**: follow the section above-**no** Administrator fallback.
 
----
-
-## MCP tools (typical)
-
-| Step | MCP tool |
-|------|----------|
-| List roles | `cma_GetListSpaceRoles` |
-| Inspect one role | `cma_GetOneSpaceRole` |
-| Create least-privilege role | `cma_CreateSpaceRole` |
-| Create token | `cma_CreateDeliveryAccessToken` |
-| Read one token (e.g. its current `allowedReferrers`) | `cma_GetOneDeliveryAccessToken` |
-| Update a token (full replacement — resend `allowedReferrers`) | `cma_UpdateOneDeliveryAccessToken` |
-
-Schema: **`weegloo-api-endpoints`** → CMA OpenAPI (**`CreateDeliveryAccessToken`**).
+Request/response shapes: **`weegloo-api-endpoints`** → CMA OpenAPI (**`CreateDeliveryAccessToken`**).
 
 ---
 
