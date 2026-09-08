@@ -84,6 +84,9 @@ does not, by default:
    created, report the resulting URL (`https://{subdomain}.weegloo.app`) and explicitly note that
    the subdomain was auto-selected to fit the service and **can be changed at any time later** (via
    `UpdateOneWebHosting`). Do not present this as a question — it is an informational notice.
+   Changing it — or registering a custom domain — changes the site's **origin**, so anything pinned
+   to the old one must be updated with it: the OAuth callback below, and any token carrying
+   **`allowedReferrers`** (a stale list refuses every call while the token itself stays valid).
 
 > **Hosting domain is `.weegloo.app`, NOT `.weegloo.com`.** Do not assume `.com`. Always read the
 > actual host from the **`url`** field of the `CreateWebHosting` / `GetOneWebHosting` response —

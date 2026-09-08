@@ -48,7 +48,6 @@ Pick the row that matches the product. Each recipe lists the **client-side** API
 
 - **Client reads:** **CDA**.
 - **Token:** one **DeliveryAccessToken** bound to a **least-privilege `SpaceRole`** for the relevant published `ContentType`s. Expose it to the browser per your build or client config (e.g. `NEXT_PUBLIC_WEEGLOO_DELIVERY_ACCESS_TOKEN`); document the pattern in the project README.
-- **Lock it to the site's origins:** set **`allowedReferrers`** on that token so a copied credential stops working off-site. It is matched on the **`Referer`** header — a browser-only lever, and a non-empty list refuses any caller that sends none (server-side rendering, curl). The role still governs *what* is readable. See **`weegloo-delivery-access-token`**.
 - **Writes:** done in the **Weegloo console** by the team — **no** client-side write path.
 - **ServiceLogin:** **not required**.
 
@@ -133,7 +132,7 @@ Combine recipes - every path uses the API that matches the **caller's identity**
 
 - **Calling CMA from a browser that does not have a Weegloo User session.** A Service User's ServiceLogin Bearer Token does **not** authorize CMA — use ACMA. The Weegloo User login flow for static admin UIs is **`weegloo-user-login`**.
 - **Putting a Personal Access Token in client-side code.** PATs are Weegloo User credentials meant for servers, CI, and developer scripts. For browser admin UIs, use the console FE login popup (Mechanism B in **`weegloo-user-login`**).
-- **Exposing a broad-role `SpaceAccessToken` in a public client.** A SpaceAccessToken embedded in a browser is only as safe as its bound role — fine with a **narrowly-scoped** role (e.g. anonymous create-only), but **never** with Administrator or a broad write role. If the client only **reads**, use a read-only **`DeliveryAccessToken`** instead. Whichever token you expose to a browser, pin it to the client's origins with **`allowedReferrers`** as well. See **`weegloo-space-access-token`**.
+- **Exposing a broad-role `SpaceAccessToken` in a public client.** A SpaceAccessToken embedded in a browser is only as safe as its bound role — fine with a **narrowly-scoped** role (e.g. anonymous create-only), but **never** with Administrator or a broad write role. If the client only **reads**, use a read-only **`DeliveryAccessToken`** instead. See **`weegloo-space-access-token`**.
 - **Reusing one DeliveryAccessToken for member-private reads.** CDA tokens are public; never bind them to anything more than the least-privilege public read scope. Use **ACDA** for per-member content.
 - **Granting Administrator (or any broad write) on a CDA DeliveryAccessToken** — strictly forbidden per **`weegloo-delivery-access-token`**.
 - **Onboarding product end-users as Weegloo Space members.** Working *your* Space as a Weegloo User means owning it or being **invited** to it — so making every product user a member would mean inviting each one. End-user sign-up belongs to **ServiceLogin**. If you find yourself inviting every product user to the Space, you are using the wrong identity model.
