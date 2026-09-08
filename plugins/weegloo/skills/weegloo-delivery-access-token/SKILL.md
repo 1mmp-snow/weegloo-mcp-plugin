@@ -1,6 +1,6 @@
 ---
 name: weegloo-delivery-access-token
-description: Create Weegloo DeliveryAccessToken (CDA) via CMA-bind role.sys.id to the intended least-privilege SpaceRole only; never Administrator or first list item; handle WGL422001 without fallback. Skill text in English only.
+description: Create Weegloo DeliveryAccessToken (CDA) via CMA-bind role.sys.id to the intended least-privilege SpaceRole only; never Administrator or first list item; handle WGL422001 without fallback. ALSO covers allowedReferrers — restricting the origins a token is accepted from (a browser-only, Referer-based lever, with subdomain-wildcard and exact-path rules, that a full-replacement update silently clears) — use when asked to lock a CDA/delivery token to a domain or site. Skill text in English only.
 ---
 
 # Weegloo Delivery Access Token (CDA)
@@ -44,6 +44,21 @@ description: Create Weegloo DeliveryAccessToken (CDA) via CMA-bind role.sys.id t
 
 ---
 
+## Restricting where the token may be used (`allowedReferrers`)
+
+A **`DeliveryAccessToken`** may name the origins it is accepted from. **`allowedReferrers`** is an optional list of origins on create and update — at most **50** entries, no duplicates — and an **empty list places no restriction**. It narrows *where* a leaked token still works; it never narrows *what* the token can read, so it is a second line of defence and **not** a substitute for the least-privilege role above.
+
+- Requests are judged on the **`Referer`** header, which makes this a **browser-only** lever. While the list is non-empty, a request arriving **without a `Referer` (or with an empty one) is refused** — that is every server-side caller (`fetch` from a backend, curl, native apps) and any page whose **`Referrer-Policy`** strips the header. Leave the list empty for a token that does not run in a browser.
+- An entry is an origin — `https://app.example.com` — optionally with a path. **`https`** only, except **`http`** for `localhost`, `127.0.0.1` and `[::1]`. The **port is part of the match** (443 for `https`, 80 for `http`, when unwritten).
+- A wildcard is allowed **only** as a leading **`*.`** label and matches **subdomains only**: `https://*.example.com` covers `app.example.com` but **not** the apex `https://example.com`. List the apex as its own entry when you need both.
+- A path is compared for **equality**, not as a prefix: `https://app.example.com/admin` does not cover `/admin/users`. Give an origin with no path unless you mean one exact page. No wildcard in a path, and both host and path must be **ASCII** — punycode an internationalised domain, percent-encode the path.
+- **A bare origin and a trailing slash mean the same thing — no path restriction.** `https://app.example.com` and `https://app.example.com/` both match **every** page on that origin; neither pins the request to the site root. Only a path with something in it (`/admin`) restricts anything.
+- Query strings, fragments and userinfo are not part of an entry, and a malformed entry is **rejected when the token is saved** rather than silently dropped.
+
+**Update replaces the whole field.** **`cma_UpdateOneDeliveryAccessToken`** is a full replacement, so a call that omits **`allowedReferrers`** **clears the restriction**. When you update anything else on the token, resend the current list — read it back from **`cma_GetOneDeliveryAccessToken`** first if you do not already hold it.
+
+---
+
 ## Error `WGL422001` (cannot assign permission you do not own)
 
 If **`cma_CreateDeliveryAccessToken`** fails with an ownership / permission error while using the **correct** least-privilege **`SpaceRole`**:
@@ -72,6 +87,8 @@ Do **not** treat Administrator as an acceptable workaround for **public, browser
 | Inspect one role | `cma_GetOneSpaceRole` |
 | Create least-privilege role | `cma_CreateSpaceRole` |
 | Create token | `cma_CreateDeliveryAccessToken` |
+| Read one token (e.g. its current `allowedReferrers`) | `cma_GetOneDeliveryAccessToken` |
+| Update a token (full replacement — resend `allowedReferrers`) | `cma_UpdateOneDeliveryAccessToken` |
 
 Schema: **`weegloo-api-endpoints`** → CMA OpenAPI (**`CreateDeliveryAccessToken`**).
 
@@ -86,4 +103,5 @@ Schema: **`weegloo-api-endpoints`** → CMA OpenAPI (**`CreateDeliveryAccessToke
 
 - Use **MCP** for CMA per project rules where applicable.
 - Tokens shipped to the **browser** are **public**—least privilege is mandatory.
+- **`allowedReferrers`** limits **where** a token works, never **what** it can read; scope the role first, then add the origin list. An update that omits the field clears it.
 - Administrator-backed delivery tokens are **not** acceptable for typical **public, browser-exposed** CDA clients.
