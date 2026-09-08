@@ -1,6 +1,6 @@
 ---
 name: weegloo-space-access-token
-description: Create a Weegloo SpaceAccessToken (CMA) — a read+write token confined to ONE Space whose exact power is set entirely by a bound SpaceRole. Unlike the read-only DeliveryAccessToken it can write (CMA data + CDA + Upload); unlike a Personal Access Token it cannot touch the Organization, the account plane, ACMA/ACDA, or ANY Space setting — the whole SETTING_* axis (SpaceRole, SpaceMembership, Webhook, ServiceLogin, WebHosting, Locale, Tag, EmailAccount, token issuance, self-mint) is refused whatever the bound role says, so the role only governs Content/ContentType/Media and Script Execute. Where it runs — a trusted backend, or a public/browser client such as anonymous posting — and what it can do are the user's call, governed by how the bound SpaceRole is scoped. Bind role.sys.id to a SpaceRole matched to that use — for a publicly-exposed token, tight enough that a leak is acceptable; never Administrator or the first list item. A token embedded in a browser can additionally be locked to its origins with allowedReferrers (matched on the Referer header, so browser-only, and cleared by a full-replacement update that omits it). Handle WGL422001 without escalating. Skill text in English only.
+description: Create a Weegloo SpaceAccessToken (CMA) — a read+write token confined to ONE Space whose exact power is set entirely by a bound SpaceRole. Unlike the read-only DeliveryAccessToken it can write (CMA data + CDA + Upload); unlike a Personal Access Token it cannot touch the Organization, the account plane, ACMA/ACDA, or ANY Space setting — the whole SETTING_* axis (SpaceRole, SpaceMembership, Webhook, ServiceLogin, WebHosting, Locale, Tag, EmailAccount, token issuance, self-mint) is refused whatever the bound role says, so the role only governs Content/ContentType/Media and Script Execute. Where it runs — a trusted backend, or a public/browser client such as anonymous posting — and what it can do are the user's call, governed by how the bound SpaceRole is scoped. Bind role.sys.id to a SpaceRole matched to that use — for a publicly-exposed token, tight enough that a leak is acceptable; never Administrator or the first list item. Handle WGL422001 without escalating. Skill text in English only.
 ---
 
 # Weegloo Space Access Token (Space-scoped read + write, role-governed)
@@ -76,11 +76,9 @@ Scope the single SAT's role to exactly the union the client needs — e.g. `cont
 
 ## Restricting where the token may be used (`allowedReferrers`)
 
-A SpaceAccessToken may also name the origins it is accepted from — **`allowedReferrers`**, an optional list on create and update (at most **50** entries, no duplicates; an **empty list places no restriction**). For a token embedded in a **public / browser** client — anonymous posting, a public submit form — it is the natural companion to rule 1: the bound role caps **what** a leaked token can do, `allowedReferrers` caps **where** it still works. It is never a substitute for scoping the role.
+A SpaceAccessToken may also carry **`allowedReferrers`**. **Do not set it unless the user explicitly asks**; matching is on the **`Referer`** header, so a server-side token — the common case here — must leave it empty or every call is refused.
 
-- Requests are judged on the **`Referer`** header, so this fits **browser** clients only. While the list is non-empty, a request that sends no `Referer` is **refused** — which is every server-side caller, and any page whose `Referrer-Policy` strips the header. For a backend importer or sync job leave the list empty and rely on the bound role plus keeping the `SPCAT…` secret server-side.
-- Entry syntax — origin, optional **exact** path, leading **`*.`** subdomain wildcard (apex not covered), `https` only except loopback, port part of the match, ASCII only: **`weegloo-delivery-access-token`** → *Restricting where the token may be used*. The same rules apply here.
-- **An update is a full replacement**, so a call that omits `allowedReferrers` **clears the restriction** — resend the current list whenever you update the description.
+The cost of setting it, and the rule that an update replaces the whole list: **`weegloo-delivery-access-token`** → *Restricting where the token may be used*.
 
 ---
 
@@ -89,6 +87,8 @@ A SpaceAccessToken may also name the origins it is accepted from — **`allowedR
 - **Authority = the bound `SpaceRole`.** What the token can do is decided entirely by the role bound at create time — to reason about a token's power, look at its role. The token resource does **not** echo a `role` field back, so record which role you bound.
 - **`name` and `role` are immutable; `description` and `allowedReferrers` are updatable.** There is no in-place role change or secret regeneration — to change the role or rotate the secret, **delete and recreate**.
 - **`cma_DeleteSpaceAccessToken` fully revokes it** (server-side auth cache included). Deletion is the correct, complete revoke; there is no separate "disable".
+
+Updating a token is a **full replacement** of the updatable field set (`description` and `allowedReferrers`) — omitting either drops it; a partial JSON-Patch path also exists for app code — see **`weegloo-cma-json-patch`**. Request/response shapes: **`weegloo-api-endpoints`** → CMA OpenAPI (**`CreateSpaceAccessToken`**).
 
 ---
 
@@ -105,25 +105,8 @@ A SpaceAccessToken may also name the origins it is accepted from — **`allowedR
 1. Decide the **exact** read/write surface the use needs (which `ContentType`s, which actions, whose resources) **and where the token will live** (a server, or a public / browser client).
 2. **`cma_CreateSpaceRole`** — a least-privilege role for precisely that surface (scope with `createdBy :self` / `contentType` / `tag` filters as needed — **`weegloo-space-role`**). Reuse an existing scoped role only if it already matches.
 3. Copy that role's **`sys.id`** from the response → **`cma_CreateSpaceAccessToken`** with `role.sys.id` set to **only** that id.
-4. If the token will live in a **browser**, set **`allowedReferrers`** to that client's origins in the same create call (see the section above).
-5. Capture **`sys.accessToken`** from the response (the `SPCAT…` secret). It is a live credential, readable again on GET — handle it per where it runs (e.g. a secret manager for a backend). Rotate by delete+recreate. **If you embed it in a public client, the bound role is the only thing limiting whoever holds it — keep that role minimal.**
-6. If step 3 fails with **`WGL422001`** → rule 4 (no escalation). If it fails with **`WGL429*`** → rule 7 (plan limit).
-
-## MCP tools (typical)
-
-| Step | MCP tool |
-|------|----------|
-| List roles (to pick / show `sys.id`) | `cma_GetListSpaceRoles` |
-| Create least-privilege role | `cma_CreateSpaceRole` |
-| Create token | `cma_CreateSpaceAccessToken` |
-| List tokens | `cma_GetListSpaceAccessTokens` |
-| Get one token | `cma_GetOneSpaceAccessToken` |
-| Update `description` / `allowedReferrers` | `cma_UpdateOneSpaceAccessToken` |
-| Delete (full revoke) | `cma_DeleteSpaceAccessToken` |
-
-Update is **full replacement** of the updatable field set (`description` and `allowedReferrers`) — omitting either drops it; a partial JSON-Patch path also exists for app code — see **`weegloo-cma-json-patch`**. Schema: **`weegloo-api-endpoints`** → CMA OpenAPI (**`CreateSpaceAccessToken`**).
-
----
+4. Capture **`sys.accessToken`** from the response (the `SPCAT…` secret). It is a live credential, readable again on GET — handle it per where it runs (e.g. a secret manager for a backend). Rotate by delete+recreate. **If you embed it in a public client, the bound role is the only thing limiting whoever holds it — keep that role minimal.**
+5. If step 3 fails with **`WGL422001`** → rule 4 (no escalation). If it fails with **`WGL429*`** → rule 7 (plan limit).
 
 ## Related
 
@@ -136,5 +119,4 @@ Update is **full replacement** of the updatable field set (`description` and `al
 ## Important
 
 - **The bound role is the entire security boundary** — scope it to the use and its exposure (for a publicly-embedded token, tight enough that a leak is acceptable); never Administrator, never the first list item.
-- For a **browser** client, add **`allowedReferrers`** on top of that role; it limits **where** the token works, not **what** it can do, and a full-replacement update that omits it clears the restriction.
 - Use **MCP** for CMA per project rules; do not call the REST endpoints directly as the agent.

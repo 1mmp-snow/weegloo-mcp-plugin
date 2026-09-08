@@ -319,19 +319,6 @@ Wire **`ServiceLogin.sys.defaultRole`** (or **`ServiceUser.roleOverride`**) to t
 
 ---
 
-## MCP tools (typical)
-
-| Role type | Create | List | One |
-|-----------|--------|------|-----|
-| **SpaceRole** | `cma_CreateSpaceRole` | `cma_GetListSpaceRoles` | `cma_GetOneSpaceRole` |
-| **ServiceUserRole** | `cma_CreateServiceUserRole` | `cma_GetListServiceUserRoles` | `cma_GetOneServiceUserRole` |
-
-OpenAPI field shapes: **`weegloo-api-endpoints`** → CMA API docs → **`CreateSpaceRole`** / **`CreateServiceUserRole`**.
-
-**CDA token binding** after the role exists: **`weegloo-delivery-access-token`** (never Administrator; bind the intended `sys.id` only).
-
----
-
 ## Common mistakes
 
 - **Hard-coding a user id** in a role meant for “every member sees only their own rows” — use **`:self`** instead.
@@ -350,4 +337,4 @@ OpenAPI field shapes: **`weegloo-api-endpoints`** → CMA API docs → **`Create
 - **`weegloo-script`** — Script `Execute` permission, the author unconditional-Allow gate, and async external-API jobs (Create vs `:self` Read/Edit/Delete split).
 - **`weegloo-webhook`** — Webhook triggers that run a Script or POST to a URL.
 - **`weegloo-scheduler`** — `SETTING_SCHEDULER` + the `script.Execute` grant a Scheduler owner must keep.
-- **`weegloo-api-endpoints`** — API base URLs, docs index, `SpaceRole` reference link.
+- **`weegloo-api-endpoints`** — API base URLs, docs index, `SpaceRole` reference link, and the CMA OpenAPI field shapes for **`CreateSpaceRole`** / **`CreateServiceUserRole`**.

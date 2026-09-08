@@ -33,6 +33,11 @@ A **Webhook** reacts to **Space events**. On a matching event it performs **exac
 > Base URLs, vendor JSON, OpenAPI discovery: `weegloo-api-endpoints`. Role for job Content and the
 > Script `Execute` permission: `weegloo-space-role` / `weegloo-script`.
 
+> **Webhook CRUD lives in the `extra` MCP tool group** (or `all`). If no `cma_*Webhook*` tool is
+> available, it is **not installed** in this session — not missing from the platform. Configure the
+> Weegloo MCP with `?group=extra` or `?group=all` (project README) rather than concluding Webhooks
+> are unavailable.
+
 ## Resource fields (CMA `Webhook`)
 
 | Field | Notes |
@@ -95,16 +100,11 @@ index, then `ResourcePatch`es an `indexedAt` value back onto it. (Full patterns:
 - **Loop protection:** a Script (or URL side effects) that changes content emits events that may fire
   other Webhooks; the platform blocks infinite create/update loops.
 
-## MCP tools
-
-Webhook CRUD lives in the **`extra`** MCP tool group (or **`all`**). If `cma_*Webhook*` tools are
-missing, configure the Weegloo MCP with `?group=extra` or `?group=all` (project README). Use the
-`cma_*` Webhook MCP tools; do not hand-call CMA HTTP for Webhooks from the agent.
-
 ## Endpoints (CMA)
 
 `GET|POST /v1/spaces/{spaceId}/webhooks` · `GET|PUT|PATCH|DELETE /v1/spaces/{spaceId}/webhooks/{webhookId}`
-(PUT full replace; PATCH RFC-6902). Monitoring/call-record endpoints also exist.
+(PUT full replace; PATCH RFC-6902). Monitoring/call-record endpoints also exist. These are for
+**application code** — as the agent, use the `cma_*` Webhook MCP tools, not hand-called CMA HTTP.
 
 ## Related
 
