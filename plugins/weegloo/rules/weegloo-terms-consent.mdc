@@ -38,7 +38,7 @@ rules:
 
   - section: Accepting the terms — ONLY on the user's explicit agreement
     items:
-      - "**`cma_AcceptTerms` records a legal consent — strictly the user's decision.** Call it ONLY after the user has, in this conversation, explicitly and affirmatively stated they agree to the latest terms (e.g. \"I agree\" / \"동의합니다\") after being shown **https://weegloo.com/terms**. NEVER call it preemptively, silently, on your own judgment, or bundled into another action."
+      - "**`cma_AcceptTerms` records a legal consent — strictly the user's decision.** Call it ONLY after the user has, in this conversation, explicitly and affirmatively stated they agree to the latest terms (e.g. \"I agree\", or the same words in their own language) after being shown **https://weegloo.com/terms**. NEVER call it preemptively, silently, on your own judgment, or bundled into another action."
       - "**\"Just proceed\" / \"skip it\" / \"stop asking\" is NOT consent.** Only an explicit agreement TO THE TERMS counts. If the user declines or ignores it, keep Weegloo work blocked and carry on with non-Weegloo work."
       - "**After the user consents:** call **`cma_AcceptTerms`**, then re-fetch `/me` and verify `sys.term.accepted === true` and `sys.term.acceptedAt >= effectiveDate` before declaring the gate cleared — then continue with the originally requested Weegloo work in the same turn."
       - "**If `cma_AcceptTerms` is not in the session's tool list**, the installed Weegloo MCP predates the consent feature. Do NOT accept via raw HTTP on the user's behalf — tell the user the Weegloo MCP needs to be updated/reinstalled (or that they can accept on the Weegloo website), then re-check `/me`."

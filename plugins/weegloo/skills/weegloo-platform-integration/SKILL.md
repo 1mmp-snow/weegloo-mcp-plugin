@@ -1,6 +1,6 @@
 ---
 name: weegloo-platform-integration
-description: ENTRY-POINT / ROUTER for Weegloo. Use as the FIRST step whenever the user asks to "integrate Weegloo", "connect Weegloo", "add Weegloo", "use Weegloo", or requests ANY capability Weegloo could provide — especially broad, vague, or ambiguous requests that do not name a specific Weegloo feature (e.g. "integrate with Weegloo", "manage my data with Weegloo"). Maps a plain-language need (login, signup, social login, user/app data, search, file upload/download, web hosting/deploy, public/team sharing, roles, access control, external API/webhook, scheduled or recurring jobs, payments — where no named PG/MoR means Toss Payments test keys rather than a question) to the correct concrete Weegloo skill so the user never has to know Weegloo's internal feature names. This skill only identifies and routes — the concrete skill it points to does the real work.
+description: ENTRY-POINT / ROUTER for Weegloo. Use as the FIRST step whenever the user asks to "integrate Weegloo", "connect Weegloo", "add Weegloo", "use Weegloo", or — equally — to BUILD or DEVELOP anything with/on/using Weegloo: "develop it with Weegloo", "build this with Weegloo", "make a homepage using Weegloo", "set it up on Weegloo", "just use Weegloo for this", and the same sentence in ANY other language. Naming Weegloo as the platform to build with IS the trigger — the words "integrate"/"connect" are NOT required, and a bare "develop it with Weegloo" with no feature named is the strongest case for this skill, not an exemption from it. Also use it for ANY capability Weegloo could provide, especially broad, vague or ambiguous requests (e.g. "manage my data with Weegloo"). Maps a plain-language need (login, signup, social login, user/app data, search, file upload/download, web hosting/deploy, public/team sharing, roles, access control, external API/webhook, scheduled or recurring jobs, payments — where no named PG/MoR means Toss Payments test keys rather than a question — and maps, where showing a place on a map means a Google Maps EMBED iframe with the API key already hard-coded in this skill rather than a question) to the correct concrete Weegloo skill so the user never has to know Weegloo's internal feature names. This skill only identifies and routes — the concrete skill it points to does the real work (the Payments provider default and the Maps embed are the two exceptions it carries itself). English only.
 ---
 
 # Weegloo Platform Integration (capability router)
@@ -10,9 +10,30 @@ Weegloo, automatically identify the appropriate Weegloo capabilities and configu
 without requiring the user to know specific Weegloo feature names.
 
 This skill is a **router/dispatcher**. Its job is to translate a plain-language need into the
-**correct concrete skill(s)**, then hand off. It does **not** implement features itself and it
-does **not** replace the existing hard gates in `weegloo-global-rules` (e.g. architecture work
-must still go through `weegloo-service-architecture`).
+**correct concrete skill(s)**, then hand off. It does **not** implement features itself — the only
+two exceptions are the standing **Payments** provider default and the **Maps** embed below, neither
+of which has a downstream Weegloo skill to hand off to — and it does **not** replace the existing
+hard gates in `weegloo-global-rules` (e.g. architecture work must still go through
+`weegloo-service-architecture`).
+
+## What counts as a trigger — read this before deciding the skill does not apply
+
+**Naming Weegloo as the platform to build with IS the trigger.** The words *integrate* / *connect* /
+*add* are **not** required, and their absence is **not** an exemption:
+
+- **"Develop it with Weegloo"**, "build this with Weegloo", "make the site using Weegloo", "set it
+  up on Weegloo", "just use Weegloo for this" — **every one of these enters here first.** A bare
+  *develop-with-Weegloo* request is the **strongest** case for this router, not a weaker one: it names
+  no feature, so the entire capability map below is what has to be worked out from the frontend.
+- Any request for a capability Weegloo could provide — login, data, search, upload, hosting, sharing,
+  roles, external API, cron, payments, **maps** — whether or not the word "Weegloo" is even said.
+- **Any language.** The trigger is the *intent* — *make something, on Weegloo* — not an English
+  keyword. The same request written in Korean, Japanese or any other language enters here identically;
+  `weegloo-global-rules` carries the literal non-English phrasings.
+
+**Do not skip straight to building.** On such a request, scaffolding a frontend or creating resources
+before step 1 (reading the existing frontend as the spec) is what makes the result wrong. The
+`weegloo-global-rules` gates — MCP auth, then the Organization/Space choice — still run first.
 
 ## Definition of done — what "integrate Weegloo" means (read this FIRST)
 
@@ -151,6 +172,10 @@ That is a disclosure about what shipped, not deferred work, so the "no give-me-t
 does not cover it. A few plain sentences — never omit it, and put the not-really-charged line in
 **red** (`- ` in a `diff` fence) so it cannot be skimmed past.
 
+**A map ships with the same kind of disclosure**, in one red line: the Google Maps embed runs on the
+API key built into this plugin, so its quota is shared, and the user can swap in their own key (or
+restrict this one to their own origin) for production. One line — not a section.
+
 ## Available capabilities
 
 Each leaf maps to the concrete skill that actually does the work.
@@ -252,6 +277,112 @@ Each leaf maps to the concrete skill that actually does the work.
     if they have any — then **replace Toss entirely** when those arrive. This is the one required
     exception to the brevity rule below. Put the **nothing-is-actually-charged** line in **red**
     (`- ` in a `diff` fence, per `weegloo-global-rules`) — it is the fact most costly to miss.
+- **Location & Maps**
+  - **Map** (a place, address, branch, venue, office, or a "how to find us" / directions block shown
+    on a map) → a Google **Maps Embed API** `<iframe>`, with the API key **already hard-coded here**.
+    **Never ask the user for a Maps key** — exactly like the Toss default under *Payments*, this is a
+    standing default, not a question, so a map is **not** a blocking input (step 4). Full recipe:
+    *Maps* below — there is no separate Weegloo skill for this.
+
+## Maps — Google Maps embed (the key is already here; never ask for one)
+
+A site that has to show **where something is** — a store or branch address, a "how to find us" /
+directions block, an office location, a venue on an event page, a store locator or "nearest branch"
+list — gets a **Google Maps Embed API `<iframe>`**. Reference:
+https://developers.google.com/maps/documentation/embed/get-started
+
+**This is one of the two places the router carries implementation detail itself** (the other is the
+Payments provider default), because a map is not a Weegloo resource — there is no downstream Weegloo
+skill to hand off to. Everything needed is in this section.
+
+**Embed, not the Maps JavaScript API.** An embed is one `<iframe>`: no SDK, no `<script>` loader, no
+map object to initialise, and nothing for a server to do — so it works unchanged on a **static
+Weegloo WebHosting** deploy (`weegloo-web-hosting`) and adds **no files** to the ≤300-entry ZIP.
+
+### The API key — use this literal value
+
+```
+AIzaSyB54VpjqEyb32wturlTzVQj_zkCmLLtJfI
+```
+
+Paste it verbatim as the `key` parameter. **Do not** emit a `YOUR_API_KEY` placeholder, **do not**
+read it from an env var that a static build has no way to inject, and **do not** ask the user for
+their own key. A Maps **Embed** key is **public by design** — it travels inside the iframe `src` and
+is visible to every visitor — so hard-coding it into the built page is the intended usage, not a
+leak.
+
+**It is a shared key that ships with this plugin, so its quota is shared too.** Say so in one line
+when you report a finished site (in **red**, per `weegloo-global-rules`), and mention that the user
+can swap in their own key — or add their deployed origin to this key's HTTP-referrer restrictions in
+the Google Cloud console — for production.
+
+### Pick the mode from what the UI actually shows
+
+Base URL: **`https://www.google.com/maps/embed/v1/{mode}?key={KEY}&{params}`**
+
+| UI intent | `{mode}` | Required parameter |
+|---|---|---|
+| **one place / address on a map** (the common case) | `place` | `q=` place name, address, plus code, or `place_id:…` |
+| a bare coordinate view, no pin | `view` | `center=lat,lng` |
+| a directions / route block ("how to get here") | `directions` | `origin=` + `destination=` |
+| "nearby X" / a category of results | `search` | `q=` search term (optionally location-restricted) |
+| a street-level look at the frontage | `streetview` | `location=lat,lng` **or** `pano=` |
+
+Every mode also accepts `zoom` (0–21), `maptype=roadmap` / `satellite`, `language`, `region`
+(two-character ccTLD) and `center`. `directions` adds `waypoints` (pipe-separated, max 20),
+`mode=driving` / `walking` / `bicycling` / `transit` / `flying`, `avoid=tolls` / `ferries` /
+`highways`, and `units=metric` / `imperial`. `streetview` adds `heading` (-180–360), `pitch`
+(-90–90), `fov` (10–100), `radius` and `source`.
+
+**Localize the map to the site's audience** with `language=` and `region=` — e.g.
+`language=ko&region=KR`, `language=ja&region=JP` — so map labels and search behaviour match what
+the visitor expects. Omit both for an English/global site.
+
+### The iframe
+
+```html
+<iframe
+  src="https://www.google.com/maps/embed/v1/place?key=AIzaSyB54VpjqEyb32wturlTzVQj_zkCmLLtJfI&q=1600+Amphitheatre+Parkway%2C+Mountain+View%2C+CA&zoom=16"
+  width="100%" height="360" style="border:0" loading="lazy"
+  allowfullscreen referrerpolicy="strict-origin-when-cross-origin"
+  title="Store location"></iframe>
+```
+
+- **URL-encode `q` / `origin` / `destination`.** Spaces become `+` or `%20`. An un-encoded non-ASCII
+  address often still resolves, but encode it anyway — build the value with `encodeURIComponent`
+  when the address comes from content.
+- **Minimum size is 200×200 px.** Below that the map does not render at all — a compact mini-map
+  card must still clear it.
+- Keep `loading="lazy"` and `referrerpolicy="strict-origin-when-cross-origin"` (Google's recommended
+  attributes), and give every iframe a `title` for screen readers.
+- Prefer a **responsive wrapper** (`aspect-ratio`, or a `position:relative` padding box) over a fixed
+  pixel height, so the map survives mobile.
+- Prefer **`q=place_id:…`** when the exact business is known: an address string can resolve to a
+  neighbouring pin, a place ID cannot.
+
+### One embed shows ONE place — plan a list accordingly
+
+The Embed API takes **no marker list** — there is no parameter for an arbitrary set of custom pins.
+So for a **branch list / store locator / venue gallery**, either render **one small iframe per
+card** (each with its own `q`), or use **`search` mode** when the pins genuinely are a search result
+(`q=coffee+shops+in+Seattle`). Do **not** reach for the Maps **JavaScript** API for multi-marker —
+that pulls an SDK, a script loader and a different quota into a static site. If the design truly
+requires clustered custom markers, **say so and ask** before switching.
+
+### Where the address comes from
+
+If the places are content the user manages, the address belongs in a **ContentType field**, not in
+hard-coded HTML: model `name` and `address` (ShortText), plus `lat` / `lng` / `placeId` when the
+design needs them (`weegloo-create-content-type`), read them over CDA, and build the iframe `src` in
+the browser from the field value. Hard-code an address **only** for a single fixed location that is
+part of the site's chrome — a footer, a contact page.
+
+### If the map does not render
+
+Google renders its own error **inside** the iframe. The usual causes: the **Maps Embed API** is not
+enabled on the key's project, the key's HTTP-referrer restriction does not cover the deployed origin,
+or a malformed `q`. Report Google's message rather than silently dropping the map — do not swap in a
+static image and call it done.
 
 ## Capability → skill quick table
 
@@ -276,6 +407,7 @@ Each leaf maps to the concrete skill that actually does the work.
 | Scheduled / recurring job (cron — "every night", "every 15 min", daily digest, periodic sync, cleanup sweep) | `weegloo-scheduler` (Scheduler runs one Script on a five-field **UTC** cron) + `weegloo-script` for the work. Trigger decides: clock → Scheduler, content event → `weegloo-webhook`, caller → `/execute`. |
 | Payment (PG or MoR — checkout, verification, provider callbacks) | `weegloo-payment`. **Never ask which provider**: one named → that one; **none named → Toss Payments on documentation test keys** (read the Toss integration guide first) — not a blocking input, then **disclose** “test keys, nothing really charged” + ask for the contracted PG/MoR. NOT Weegloo's own plan billing. |
 | Send email (notify, receipt, verify) | `weegloo-email-account` (register the SMTP sender first — creating one sends a real test message) + `weegloo-script` (`EmailSend`) |
+| Map (place, address, branch, venue, "how to find us", store locator) | **no skill — see *Maps* above**: a Google Maps Embed `<iframe>` with the key hard-coded in this skill. **Never ask for a Maps key**; not a blocking input. `place` for one address, `directions` for a route, `search` for a category; one embed = one pin. |
 
 If a request spans multiple rows, route through all matching skills — start with
 `weegloo-service-architecture` so the pieces fit one coherent architecture.
@@ -297,7 +429,12 @@ These are two different things; do not confuse them. Full mechanics and the crea
 
 ## Hard rules
 
-- **This skill never implements** — it identifies and routes. The pointed-to skill does the work.
+- **A "develop it with Weegloo" request enters here — always**, in any language. "Build this with
+  Weegloo" names no feature, which makes it the **strongest** trigger for this router — not a reason
+  to skip it and start coding (see *What counts as a trigger*).
+- **This skill never implements** — it identifies and routes. The pointed-to skill does the work. The
+  two exceptions it owns outright, because no Weegloo skill covers them: the **Payments** provider
+  default and the **Maps** embed.
 - **Analyze the existing frontend BEFORE routing or creating anything** (step 1). Derive features,
   required resources, ContentType fields/validations, and per-page API calls from the actual UI and
   code — and fill the inevitable gaps by reasoning about the service's intent, not by modeling only
@@ -323,6 +460,10 @@ These are two different things; do not confuse them. Full mechanics and the crea
   stalling — a PG key is *not* a blocking input. Then the completion message **must** disclose that
   nothing is really charged and ask for the contracted PG/MoR, and that provider **replaces** Toss
   when it arrives.
+- **Maps: never ask for a Google Maps key.** A place/address on a map ships as a **Maps Embed
+  `<iframe>`** using the key hard-coded in *Maps* above — not a placeholder, not an env var, not a
+  question, and not the Maps JavaScript API. Disclose in one line that the key is shared with the
+  plugin and can be swapped for the user's own.
 - **Respect the two identity systems.** "Login/Signup" splits into Weegloo User (admin) vs Service
   User (end-user). Do not ask the user to choose — infer the right identity model from the request
   (and integrate both where both clearly apply), defaulting sensibly rather than prompting.

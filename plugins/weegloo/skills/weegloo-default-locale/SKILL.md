@@ -97,7 +97,7 @@ Example: **`?locale=*`**. The server returns **every locale’s** stored value f
 "fields": {
   "title": {
     "en-US": "Hello World",
-    "ko-KR": "안녕, 세상!"
+    "fr-FR": "Bonjour le monde"
   }
 }
 ```

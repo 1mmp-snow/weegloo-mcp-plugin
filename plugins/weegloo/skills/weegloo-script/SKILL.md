@@ -370,8 +370,8 @@ default `false`) — **Advanced Search** over Content (see the *Advanced Search*
 
 > **`where` / `order` field keys — a content field MUST be `fields.<apiName>`, never the bare name (the
 > #1 mistake).** Write **`fields.postId`**, not `postId` — a bare content-field name is not recognized and
-> fails with **`WEB400002` "'…' 는 존재하지 않는 필드입니다 / … does not exist"**. The space **default
-> locale is applied automatically** to a `fields.<name>` key, so **do not hand-append a locale**: use
+> fails with **`WEB400002` "'…' does not exist"**. The space **default locale is applied
+> automatically** to a `fields.<name>` key, so **do not hand-append a locale**: use
 > `fields.postId` (default locale) — `postId.ko-KR` and bare `postId` both fail. Only to target a
 > **non-default** locale do you write the full `fields.<name>.<locale>` (e.g. `fields.postId.en-US`).
 > **Exceptions (no `fields.` prefix):** **`sys.*`** fields (`sys.createdAt`, `sys.status`, …) and the
