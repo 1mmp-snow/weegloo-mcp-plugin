@@ -30,3 +30,4 @@ rules:
     items:
       - **Delete requires the target to be `Draft` or `Archived`** — a `Published` or `Changed` Media must be **unpublished first** (which returns it to `Draft`). A `Published`/`Changed` Media **cannot be archived directly** (archive is only reachable from `Draft`), so "unpublish → then optionally archive" is the only path. Delete does **not** unpublish for you.
       - A Media whose file is **still processing** cannot be updated, patched, or deleted (busy) — wait for the state to settle.
+      - **A Media that is deleted is not unlinked from Content.** Nothing checks inbound references, so a `Refer → Media` field on another Content keeps a stub pointing at a row that no longer exists (an image that never loads). Find referrers before deleting, and for the wider delete-dependency order (what blocks a `Space`, a `ContentType`, a `SpaceRole`) see **`weegloo-resource-deletion`**.
