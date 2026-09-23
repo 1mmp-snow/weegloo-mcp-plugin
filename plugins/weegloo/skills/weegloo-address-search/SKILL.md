@@ -1,6 +1,7 @@
 ---
 name: weegloo-address-search
 description: Wire a SOUTH KOREAN address / postcode lookup into a form — a signup or profile address, a checkout shipping address, a saved address book, a branch or store an admin registers, a "주소 찾기" / 우편번호 button, a zonecode / zipcode / postcode field, a 도로명·지번 pair, 배송지 주소 입력. Always the Kakao (Daum) Postcode widget — one CDN script, client-side, no API key. Covers popup open() vs embedded embed(), the oncomplete result fields and their two traps, the 참고항목 composition, the mandatory 상세주소 detail input, and modelling the result in Weegloo as private per-member data. South Korea only.
+country: KR
 ---
 
 # Address & postcode lookup — Kakao (Daum) Postcode (South Korea only)
