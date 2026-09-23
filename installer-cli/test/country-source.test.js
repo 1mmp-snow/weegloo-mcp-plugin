@@ -194,3 +194,30 @@ test('loadResources: a malformed country rejects the whole manifest (strict — 
     });
   }
 });
+
+// ── loadResources: the manifest's optional `variants` map ──────────────────
+
+test('loadResources: a valid variants map is carried through; absent → no key (the pre-variant shape)', async () => {
+  const variants = { 'weegloo-pay': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'toss' } }] };
+  await withFetch(serveManifest({ ...manifestWith(), variants }), async () => {
+    assert.deepEqual((await loadResources('latest')).variants, variants);
+  });
+  await withFetch(serveManifest(manifestWith()), async () => {
+    assert.ok(!('variants' in (await loadResources('latest'))));
+  });
+});
+
+test('loadResources: a malformed variants map rejects the whole manifest', async () => {
+  const malformed = [
+    null,
+    [],
+    { 'weegloo-pay': [] },
+    { 'weegloo-pay': [{ name: 'kr', country: { exclude: ['KR'] }, files: { 'SKILL.md': 'x' } }] },
+    { 'weegloo-pay': [{ name: 'kr', country: { include: ['KR'] }, files: {} }] },
+  ];
+  for (const bad of malformed) {
+    await withFetch(serveManifest({ ...manifestWith(), variants: bad }), async () => {
+      assert.equal(await loadResources('latest'), null, JSON.stringify(bad));
+    });
+  }
+});

@@ -122,16 +122,24 @@ export function planUpdate({
  * flow keeps its own output sink). `verb` fills the unknown-country warning: 'installing' /
  * 'updating'.
  *
- * @param {{ country: string|null, source: string, excludedSkills: string[], excludedRules: string[] }} info
+ * With the country unknown, `excludedSkills` can still be non-empty: a variants-only skill (no
+ * top-level SKILL.md) installs only where a variant names the country, so it is skipped.
+ *
+ * @param {{ country: string|null, source: string, excludedSkills: string[], excludedRules: string[], variantSkills?: Array<{id:string, variant:string}> }} info
  * @param {string} verb
  * @returns {string[]}
  */
-export function countryReportLines({ country, source, excludedSkills = [], excludedRules = [] }, verb) {
+export function countryReportLines({ country, source, excludedSkills = [], excludedRules = [], variantSkills = [] }, verb) {
   if (!country) {
-    return [
+    const what = excludedSkills.length > 0 ? 'every skill/rule except country-only ones' : 'every skill/rule';
+    const lines = [
       chalk.yellow('  ⚠  ') +
-        chalk.dim(`Could not determine your country — ${verb} every skill/rule (no country filter). Pin one with --country <code>.`),
+        chalk.dim(`Could not determine your country — ${verb} ${what} (no country filter). Pin one with --country <code>.`),
     ];
+    if (excludedSkills.length > 0) {
+      lines.push(chalk.dim(`  - Skipped (country-only, no default version): ${excludedSkills.length} skill(s) (${excludedSkills.join(', ')})`));
+    }
+    return lines;
   }
   const label = { flag: ' (--country)', recorded: ' (recorded at install)', detected: ' (detected)' }[source] ?? '';
   const lines = [chalk.dim(`  Country: ${country}${label}`)];
@@ -139,6 +147,9 @@ export function countryReportLines({ country, source, excludedSkills = [], exclu
   if (excludedSkills.length > 0) parts.push(`${excludedSkills.length} skill(s) (${excludedSkills.join(', ')})`);
   if (excludedRules.length > 0) parts.push(`${excludedRules.length} rule(s) (${excludedRules.join(', ')})`);
   if (parts.length > 0) lines.push(chalk.dim(`  - Not offered in ${country}: ${parts.join(', ')}`));
+  if (variantSkills.length > 0) {
+    lines.push(chalk.dim(`  - ${country} version: ${variantSkills.map((v) => `${v.id} (${v.variant})`).join(', ')}`));
+  }
   return lines;
 }
 

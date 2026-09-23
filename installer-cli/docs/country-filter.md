@@ -94,6 +94,54 @@ yaml: `Alias cannot be an empty string`). 빌더가 줄을 지우니 상관없�
 두 파서에서 유효한 문자열로 확인했다: `KR` → `"KR"`, `KR, US, CA` → `"KR, US, CA"`, `-KR, -JP` →
 `"-KR, -JP"`, `"*"` → `"*"`. `country: NO`(노르웨이)도 두 파서 모두 문자열 `"NO"` 로 읽는다(YAML 1.2).
 
+### 3.4 국가별 변형 (`variants/<name>/`) — 한 이름, 나라마다 다른 본문
+
+부모(라우터 `weegloo-platform-integration`)는 스킬을 **이름 하나**로 부른다. 그래서 "KR 에서는 Toss 결제 안내,
+그 밖에서는 Stripe 안내"는 이름이 같은 스킬 두 개로 만들 수 없다(디렉터리 이름이 곧 스킬 id 다). 대신
+**한 스킬 안에 변형**을 둔다:
+
+```
+skills/weegloo-payment/
+├── SKILL.md                  ← 최상위 = 기본 버전 (태그 없음, 또는 제외 태그만)
+├── references/…
+└── variants/tosspayments/    ← 변형 = 그 나라들용 완전한 대체본
+    ├── SKILL.md              ←   name: weegloo-payment   country: KR
+    └── references/…
+```
+
+설치되면 어느 쪽이든 `SKILL.md` 가 하나인 평범한 스킬이다 — KR 설치는 `variants/tosspayments/` 의 내용이, 그
+밖의 설치는 최상위 내용이 `weegloo-payment/` 에 쓰인다. **최상위와 변형은 부모·자식이 아니라 대체본**이므로
+서로를 언급하지 않는다(한쪽이 디스크에 있으면 다른 쪽은 없다).
+
+| 배치 | KR | US | JP | 국가 모름 |
+|---|---|---|---|---|
+| 1. 최상위 `SKILL.md`, 태그 없음 | 최상위 | 최상위 | 최상위 | 최상위 |
+| 2. 최상위 `SKILL.md`, `country: -KR` | 설치 안 함 | 최상위 | 최상위 | 최상위 |
+| 3. 최상위 없음, `variants/a` (`country: KR, US`) | a | a | 설치 안 함 | **설치 안 함** |
+| 4. 최상위 + `variants/a` (`KR`) + `variants/b` (`US`) | a | b | 최상위 | 최상위 |
+
+판정: **그 나라를 포함하는 변형 → 없으면 최상위(태그가 허용할 때) → 없으면 설치 안 함.** 국가를 모르면 변형을
+고르지 않는다 — 최상위는 설치되고(fail-open), 최상위가 없는 3번 스킬은 **설치되지 않는다**(사용자 결정).
+
+| 규칙 | 이유 |
+|---|---|
+| 변형은 **통째 교체** — 그 폴더만 설치, 최상위 파일과 섞지 않음 | 무엇이 설치되는지 폴더 하나로 보인다. 덮어쓰기(없는 파일은 최상위에서 상속)는 기각 — 기본 버전 전용 참조 문서가 다른 나라 설치에 섞이는지 저자가 매번 확인해야 한다. 공통 내용은 변형에 다시 쓴다 |
+| 변형 `SKILL.md` 의 `name:` = 스킬 id | 그 이름으로 설치된다 |
+| 변형의 `country:` 는 **포함 목록 필수** | 변형은 "이 나라들에서 대신 쓴다"는 뜻뿐이다 — 제외·전체는 변형이 아니다 |
+| **최상위 `SKILL.md` 의 포함 목록은 빌드 에러** | 포함은 변형의 몫 — 한 뜻을 쓰는 방법을 하나로. 룰(`.mdc` 한 파일)은 변형이 없으므로 포함 태그를 그대로 쓴다 |
+| 변형끼리 나라 겹침 · 중첩 `variants/` · `variants/` 바로 아래 파일 · 폴더명 `[A-Za-z0-9_-]` 위반 | 빌드 에러 — 한 나라는 버전 하나 |
+| 최상위 `SKILL.md` 가 없으면 스킬 폴더엔 `variants/` 만 | 다른 파일(`metadata.json`, `references/`)은 설치될 곳이 없다 — 변형 폴더 안에 둔다 |
+| 변형 `description` 도 700 B 캡 | 그 나라에서 매 세션 로딩된다(`budgets.test.js` 가 변형까지 검사) |
+| 부모·룰은 **이름만** 부르고 변형별 사실을 적지 않는다 | 예: 라우터가 "Stripe 테스트 키를 박는다"고 적으면 KR 설치본(Toss)과 모순된다 |
+
+**매니페스트:** 변형은 `skills` 가 아니라 최상위 **`variants` 맵**에 실린다 —
+`{ "weegloo-payment": [ { "name": "tosspayments", "country": { "include": ["KR"] }, "files": { … } } ] }`.
+`skills` 에는 최상위 `SKILL.md` 가 있는 스킬만 들어가므로, 지금 게시된 CLI 도 유효한 매니페스트를 읽는다(§9).
+변형이 없으면 키도 없고 `version` 해시에도 들어가지 않는다 — 변형 없는 코퍼스는 바이트 그대로다.
+
+첫 적용: `weegloo-address-search` 는 3번 배치다 — `variants/kr/`(`SKILL.md` + `metadata.json`, `country: KR`)만
+있다. KR 설치본은 이전과 파일·바이트가 같다.
+
 ## 4. 빌드 처리 (저장소 루트 `scripts/build-installer-manifest.mjs`)
 
 1. **스킬**: `SKILL.md` 에서 `extractCountryTag` → `country:` 줄을 **지운** 본문을 임베드하고, 값을
@@ -245,12 +293,16 @@ project scope 의 codex / antigravity / androidstudio 는 `.agents/skills` 와 `
 | 기능 이전 설치의 `--update` | 기록에 `country` 없음 → 1회 조회 후 기록(§6.1) |
 | 태그 없는 코퍼스 | 매니페스트 **바이트 동일**(§4-5) |
 | 손상된 `country` 필드(`{include:[]}`, `{include:['kr']}`, `'KR'`) | 매니페스트 전체 거부 — `normalizeManifest` 의 다른 모양 에러와 같은 strict |
+| **구 CLI + 변형이 있는 매니페스트** | 최상위 `variants` 맵을 **무시** → 최상위 버전만 설치. 최상위가 없는 3번 스킬은 `skills` 에 없으므로 **설치되지 않고**, 설치돼 있었다면 다음 `--update` 에서 prune 된다(예: `weegloo-address-search` — KR 사용자도 잃는다). → 변형만 있는 스킬을 `latest` 에 내보내기 **전에** 변형을 아는 CLI 를 npm 에 배포한다 |
+| 손상된 `variants` 맵(빈 목록, 제외 태그 변형, 빈 `files`, 나라 겹침) | 매니페스트 전체 거부 |
 
 ## 10. 한계
 
 - **마켓플레이스 경로에는 필터가 없다.** `.claude-plugin/marketplace.json` · `.cursor-plugin/marketplace.json`
   은 `plugins/weegloo` 원본을 직접 읽는다 — 빌더도 installer 도 거치지 않으므로 태그된 스킬도 전 국가에
   설치되고, `country:` 줄도 원본 그대로 남는다. 문법을 유효 YAML 로 제한한 이유가 이것이다(§3.3).
+  마켓플레이스는 `skills/<id>/SKILL.md` 만 읽으므로 **최상위 버전만** 보이고, 최상위가 없는 3번 스킬은 어느
+  나라에서도 보이지 않는다(§3.4).
   harness 가 모르는 frontmatter 키를 무시하는지는 **측정되지 않았다**.
 - **IP 기반 추정이다.** VPN, 회사 프록시, 해외 출장, 해외 리전 CI 러너는 오판된다. `--country` 로 고정한다.
   업데이트는 기록을 재사용하므로 **오판도 고정된다** — `--update --country <cc>` 로 고친다.
@@ -260,7 +312,7 @@ project scope 의 codex / antigravity / androidstudio 는 `.agents/skills` 와 `
   가능해야 한다**(CLAUDE.md §1.3-4 Verdict 우선). 좋은 예(현행 `weegloo-global-rules`): 주소 입력 줄이
   "**SOUTH KOREA only**; a form that will hold foreign addresses gets a plain free-text field" 를 스스로 말한다.
 - **단위는 스킬·룰 통째다.** 파일 하나, 문단 하나를 국가별로 가를 수 없다(`references/` 태그 금지, §4-2).
-  나라마다 다른 문단이 필요하면 스킬을 나눈다.
+  나라마다 다른 내용이 필요하면 **변형**(§3.4)을 쓴다 — 스킬 한 벌을 통째로 다시 쓴다. 룰에는 변형이 없다.
 - **제외 기간 동안 해제(deselect) 기억이 사라진다.** 제외된 스킬은 `availableSkills` 에서 빠지므로,
   나중에 다시 허용되면 "new" 로 자동 추가된다 — 그 전에 사용자가 일부러 해제했던 스킬이라도.
 - **fixtures 는 설치된 코퍼스를 잰다**(CLAUDE.md §5.2). 태그가 있으면 측정 장비의 기록 국가 코퍼스를
@@ -288,9 +340,10 @@ project scope 의 codex / antigravity / androidstudio 는 `.agents/skills` 와 `
 
 | 파일 | 역할 |
 |---|---|
-| `src/country.js` | 태그 문법(`parseCountryTag`, `extractCountryTag`), 필드 검증(`normalizeCountrySpec`), 필터(`countryAllows`, `filterResourcesByCountry`), 국가 결정(`resolveCountry`), 조회 URL(`countryCheckUrl`), 참조 공백(`findCountryReferenceGaps`) |
-| `../scripts/build-installer-manifest.mjs` (저장소 루트) | 추출·제거·구조 필드·코어 룰 금지·보고(`countryReport`) |
-| `src/github.js` | `normalizeManifest` 의 `country` 검증, `fetchCountry` |
+| `src/country.js` | 태그 문법(`parseCountryTag`, `extractCountryTag`), 필드 검증(`normalizeCountrySpec`, `normalizeCountryVariants`), 필터·변형 선택(`countryAllows`, `filterResourcesByCountry`), 국가 결정(`resolveCountry`), 조회 URL(`countryCheckUrl`), 참조 공백(`findCountryReferenceGaps`) |
+| `../scripts/build-installer-manifest.mjs` (저장소 루트) | 추출·제거·구조 필드·코어 룰 금지·변형 수집과 검증(`buildSkills`)·보고(`countryReport`) |
+| `src/github.js` | `normalizeManifest` 의 `country`·`variants` 검증, `fetchCountry` |
+| `src/origins.js` | `applyOriginsToResources` 가 변형 파일도 매핑 |
 | `src/cli.js` | `--country` / `WEEGLOO_COUNTRY` |
 | `src/index.js` | install — 동시 조회, 필터, 출력 |
 | `src/update.js` | update — 기록 재사용, 필터, sharer 의 `different country` |

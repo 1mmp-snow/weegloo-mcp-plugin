@@ -14,6 +14,7 @@ import {
   describeCountrySpec,
   countrySubset,
   findCountryReferenceGaps,
+  normalizeCountryVariants,
 } from '../src/country.js';
 
 // ── the tag grammar ─────────────────────────────────────────────────────────
@@ -274,5 +275,128 @@ test('findCountryReferenceGaps: flags an entry that routes to a skill it outlive
       'rule weegloo-global-rules → skill weegloo-address-search (* ⊄ KR)',
     ],
     'a KR-only referrer is fine, and an id prefix is not a mention'
+  );
+});
+
+// ── country variants: one name, a version per country ───────────────────────────────────
+
+const VARIANT_RESOURCES = {
+  skills: [
+    { id: 'weegloo-all', files: { 'SKILL.md': 'all' } }, // 1. every country
+    { id: 'weegloo-not-kr', country: { exclude: ['KR'] }, files: { 'SKILL.md': 'not-kr' } }, // 2. all but KR
+    { id: 'weegloo-split', files: { 'SKILL.md': 'split default' } }, // 4. top level for the rest
+  ],
+  rules: [{ id: 'weegloo-r', content: 'r' }],
+  variants: {
+    // 3. variants only: KR and US, nothing elsewhere
+    'weegloo-kr-us': [{ name: 'krus', country: { include: ['KR', 'US'] }, files: { 'SKILL.md': 'kr-us' } }],
+    // 4. KR → a, US → b
+    'weegloo-split': [
+      { name: 'a', country: { include: ['KR'] }, files: { 'SKILL.md': 'split A', 'references/a.md': 'a' } },
+      { name: 'b', country: { include: ['US'] }, files: { 'SKILL.md': 'split B' } },
+    ],
+  },
+};
+
+const installed = (country) => {
+  const r = filterResourcesByCountry(VARIANT_RESOURCES, country, { exemptRuleIds: [] });
+  return Object.fromEntries(r.resources.skills.map((s) => [s.id, s.files['SKILL.md']]));
+};
+
+test('filterResourcesByCountry: the four layouts resolve per country', () => {
+  assert.deepEqual(installed('KR'), {
+    'weegloo-all': 'all',
+    'weegloo-kr-us': 'kr-us',
+    'weegloo-split': 'split A',
+  });
+  assert.deepEqual(installed('US'), {
+    'weegloo-all': 'all',
+    'weegloo-kr-us': 'kr-us',
+    'weegloo-not-kr': 'not-kr',
+    'weegloo-split': 'split B',
+  });
+  assert.deepEqual(installed('JP'), {
+    'weegloo-all': 'all',
+    'weegloo-not-kr': 'not-kr',
+    'weegloo-split': 'split default',
+  });
+});
+
+test('filterResourcesByCountry: unknown country → top levels only; a variants-only skill is not installed', () => {
+  assert.deepEqual(installed(null), {
+    'weegloo-all': 'all',
+    'weegloo-not-kr': 'not-kr', // fail-open: the exclusion is not applied without a country
+    'weegloo-split': 'split default',
+  });
+  const r = filterResourcesByCountry(VARIANT_RESOURCES, null);
+  assert.deepEqual(r.excludedSkills, ['weegloo-kr-us']);
+  assert.deepEqual(r.variantSkills, []);
+});
+
+test('filterResourcesByCountry: a variant replaces the whole skill and is reported; the map is consumed', () => {
+  const r = filterResourcesByCountry(VARIANT_RESOURCES, 'KR');
+  const split = r.resources.skills.find((s) => s.id === 'weegloo-split');
+  assert.deepEqual(split, { id: 'weegloo-split', files: { 'SKILL.md': 'split A', 'references/a.md': 'a' } }, 'only the variant files');
+  assert.deepEqual(r.variantSkills, [
+    { id: 'weegloo-kr-us', variant: 'krus' },
+    { id: 'weegloo-split', variant: 'a' },
+  ]);
+  assert.deepEqual(r.excludedSkills, ['weegloo-not-kr']);
+  assert.ok(!('variants' in r.resources), 'installers never see the variants map');
+  assert.deepEqual(r.resources.skills.map((s) => s.id), ['weegloo-all', 'weegloo-kr-us', 'weegloo-split'], 'catalog stays sorted');
+  assert.ok('variants' in VARIANT_RESOURCES, 'input untouched');
+});
+
+test('normalizeCountryVariants: accepts the builder shape, rejects anything else', () => {
+  const ok = { 'weegloo-x': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'x' } }] };
+  assert.deepEqual(normalizeCountryVariants(ok), ok);
+  const bad = [
+    null,
+    [],
+    { 'weegloo-x': [] },
+    { 'weegloo x': ok['weegloo-x'] },
+    { 'weegloo-x': [{ name: 'k.r', country: { include: ['KR'] }, files: { 'SKILL.md': 'x' } }] },
+    { 'weegloo-x': [{ name: 'kr', country: { exclude: ['KR'] }, files: { 'SKILL.md': 'x' } }] },
+    { 'weegloo-x': [{ name: 'kr', files: { 'SKILL.md': 'x' } }] },
+    { 'weegloo-x': [{ name: 'kr', country: { include: ['KR'] }, files: {} }] },
+    { 'weegloo-x': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 1 } }] },
+    {
+      'weegloo-x': [
+        { name: 'a', country: { include: ['KR'] }, files: { 'SKILL.md': 'a' } },
+        { name: 'b', country: { include: ['KR'] }, files: { 'SKILL.md': 'b' } },
+      ],
+    },
+    {
+      'weegloo-x': [
+        { name: 'a', country: { include: ['KR'] }, files: { 'SKILL.md': 'a' } },
+        { name: 'a', country: { include: ['US'] }, files: { 'SKILL.md': 'b' } },
+      ],
+    },
+  ];
+  for (const raw of bad) assert.equal(normalizeCountryVariants(raw), null, JSON.stringify(raw));
+});
+
+test('findCountryReferenceGaps: presence counts variants, and a variant is its own referrer', () => {
+  const gaps = findCountryReferenceGaps({
+    skills: [
+      { id: 'weegloo-router', files: { 'SKILL.md': 'payments → weegloo-pay; postcode → weegloo-kr-only' } },
+      { id: 'weegloo-pay', files: { 'SKILL.md': 'stripe' } },
+      { id: 'weegloo-eu', country: { exclude: ['KR', 'US'] }, files: { 'SKILL.md': 'eu' } },
+    ],
+    rules: [{ id: 'weegloo-global-rules', content: 'weegloo-eu is everywhere but KR/US' }],
+    variants: {
+      'weegloo-pay': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'toss; see weegloo-kr-only' } }],
+      'weegloo-kr-only': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'kakao' } }],
+      // weegloo-eu gets a US version, so it is now missing only in KR
+      'weegloo-eu': [{ name: 'us', country: { include: ['US'] }, files: { 'SKILL.md': 'us' } }],
+    },
+  });
+  assert.deepEqual(
+    gaps.map((g) => `${g.from} → ${g.to} (${g.fromCountry} ⊄ ${g.toCountry})`),
+    [
+      'rule weegloo-global-rules → skill weegloo-eu (* ⊄ -KR)',
+      'skill weegloo-router → skill weegloo-kr-only (* ⊄ KR)',
+    ],
+    'weegloo-pay is everywhere (top level + variant); its KR variant may name a KR-only skill'
   );
 });

@@ -217,3 +217,15 @@ test('applyOriginMapping: sentence-final dot and backticks still map; suffix-ali
   });
   assert.equal(out, 'see `cma.acme.com`, then cma.acme.com. Also cma.weegloo.company stays.');
 });
+
+test('applyOriginsToResources: country variant files are rewritten too (the variant is picked after mapping)', () => {
+  const withVariants = {
+    ...RESOURCES,
+    variants: { 'weegloo-a': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'call https://cma.weegloo.com/v1/kr' } }] },
+  };
+  const out = applyOriginsToResources(withVariants, ACME);
+  assert.equal(out.variants['weegloo-a'][0].files['SKILL.md'], 'call https://cma.acme.com/v1/kr');
+  assert.deepEqual(out.variants['weegloo-a'][0].country, { include: ['KR'] });
+  assert.equal(withVariants.variants['weegloo-a'][0].files['SKILL.md'], 'call https://cma.weegloo.com/v1/kr', 'input untouched');
+  assert.ok(!('variants' in applyOriginsToResources(RESOURCES, ACME)), 'no variants → no key');
+});

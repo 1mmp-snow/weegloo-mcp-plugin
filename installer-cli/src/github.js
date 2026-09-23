@@ -1,7 +1,7 @@
 import path from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
-import { normalizeCountryCode, normalizeCountrySpec } from './country.js';
+import { normalizeCountryCode, normalizeCountrySpec, normalizeCountryVariants } from './country.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -198,6 +198,14 @@ function normalizeManifest(data) {
     rules.push({ id: r.id, ...(country ? { country } : {}), content: r.content });
   }
 
+  // Optional per-country skill versions (country.js header). Absent → no key, the pre-variant
+  // shape; present but malformed → reject the whole manifest, like every other bad field.
+  let variants;
+  if (data.variants !== undefined) {
+    variants = normalizeCountryVariants(data.variants);
+    if (!variants) return null;
+  }
+
   return {
     source: 'manifest',
     // Optional: older manifests (pre-self-update) have no `version`. Absent ⇒ null, which the
@@ -207,6 +215,7 @@ function normalizeManifest(data) {
     mcp: { weeglooUrl: data.mcp.weeglooUrl, uploadApiUrl: data.mcp.uploadApiUrl },
     skills,
     rules,
+    ...(variants ? { variants } : {}),
   };
 }
 
@@ -220,10 +229,11 @@ function normalizeManifest(data) {
  * unsupported schemaVersion) so the caller can fail fast rather than install a degraded set.
  *
  * `country` is present on an entry ONLY when it is restricted to (`include`) or kept out of
- * (`exclude`) some countries; filtering on it is the caller's job (`filterResourcesByCountry`).
+ * (`exclude`) some countries, and `variants` only when some skill has per-country versions;
+ * resolving both for a country is the caller's job (`filterResourcesByCountry`).
  *
  * @param {string} ref
- * @returns {Promise<{ source: string, version: string|null, repoContentPrefix: string, mcp: {weeglooUrl:string, uploadApiUrl:string}, skills: Array<{id:string, country?: {include:string[]}|{exclude:string[]}, files:Record<string,string>}>, rules: Array<{id:string, country?: {include:string[]}|{exclude:string[]}, content:string}> } | null>}
+ * @returns {Promise<{ source: string, version: string|null, repoContentPrefix: string, mcp: {weeglooUrl:string, uploadApiUrl:string}, skills: Array<{id:string, country?: {include:string[]}|{exclude:string[]}, files:Record<string,string>}>, rules: Array<{id:string, country?: {include:string[]}|{exclude:string[]}, content:string}>, variants?: Record<string, Array<{name:string, country:{include:string[]}, files:Record<string,string>}>> } | null>}
  */
 export async function loadResources(ref) {
   const url = `${RAW_BASE}/${ref}/${PLUGIN_PACKAGE_ROOT}/installer-manifest.json`;

@@ -72,12 +72,20 @@ test('no rule file is missing from the cap table', () => {
 test('every skill description stays under the cap', () => {
   const over = [];
   for (const id of readdirSync(SKILLS_DIR)) {
-    const p = path.join(SKILLS_DIR, id, 'SKILL.md');
-    if (!existsSync(p)) continue;
-    const desc = descriptionOf(p);
-    assert.ok(desc, `${id}: SKILL.md has no frontmatter description`);
-    const n = Buffer.byteLength(desc, 'utf-8');
-    if (n > DESCRIPTION_CAP) over.push(`${id}: ${n} B > ${DESCRIPTION_CAP} B`);
+    // A country variant (`variants/<name>/SKILL.md`) installs AS the skill, so its description is
+    // the one loaded every session in that country — the same cap applies.
+    const candidates = [[id, path.join(SKILLS_DIR, id, 'SKILL.md')]];
+    const variantsDir = path.join(SKILLS_DIR, id, 'variants');
+    if (existsSync(variantsDir)) {
+      for (const v of readdirSync(variantsDir)) candidates.push([`${id}/variants/${v}`, path.join(variantsDir, v, 'SKILL.md')]);
+    }
+    for (const [label, p] of candidates) {
+      if (!existsSync(p)) continue;
+      const desc = descriptionOf(p);
+      assert.ok(desc, `${label}: SKILL.md has no frontmatter description`);
+      const n = Buffer.byteLength(desc, 'utf-8');
+      if (n > DESCRIPTION_CAP) over.push(`${label}: ${n} B > ${DESCRIPTION_CAP} B`);
+    }
   }
   assert.deepEqual(over, [], `description(s) over cap:\n  ${over.join('\n  ')}`);
 });

@@ -280,11 +280,15 @@ const skillMd = (tagLine) =>
 const ruleMdc = (tagLine) =>
   ['---', 'id: r', ...(tagLine ? [tagLine] : []), 'type: rule', '---', '', 'rules: []', ''].join('\n');
 
+/** A variant SKILL.md: `name` is the skill id it installs as, `tagLine` its country line. */
+const variantMd = (name, tagLine, body = `# ${name}`) =>
+  ['---', `name: ${name}`, 'description: Variant.', ...(tagLine ? [tagLine] : []), '---', '', body, ''].join('\n');
+
 test('buildManifest turns a SKILL.md country tag into a field and strips only that line', () => {
   const tagged = [
     '---',
     'name: demo',
-    'country: KR',
+    'country: -KR',
     'description: Demo skill.',
     '---',
     '',
@@ -296,7 +300,7 @@ test('buildManifest turns a SKILL.md country tag into a field and strips only th
     { skills: { demo: { 'SKILL.md': tagged, 'references/page.md': '# Page\n', 'metadata.json': '{}' } } },
     (root) => {
       const skill = buildManifest({ rootDir: root }).skills[0];
-      assert.deepEqual(skill.country, { include: ['KR'] });
+      assert.deepEqual(skill.country, { exclude: ['KR'] });
       // Key order is part of the byte-identical-manifest contract.
       assert.deepEqual(Object.keys(skill), ['id', 'country', 'files']);
       assert.equal(
@@ -310,9 +314,9 @@ test('buildManifest turns a SKILL.md country tag into a field and strips only th
 });
 
 test('buildManifest reads a country tag from a CRLF checkout (Windows working tree)', () => {
-  withCorpus({ skills: { demo: { 'SKILL.md': skillMd('country: KR').replace(/\n/g, '\r\n') } } }, (root) => {
+  withCorpus({ skills: { demo: { 'SKILL.md': skillMd('country: -KR').replace(/\n/g, '\r\n') } } }, (root) => {
     const skill = buildManifest({ rootDir: root }).skills[0];
-    assert.deepEqual(skill.country, { include: ['KR'] });
+    assert.deepEqual(skill.country, { exclude: ['KR'] });
     assert.equal(skill.files['SKILL.md'], skillMd());
   });
 });
@@ -328,11 +332,11 @@ test('buildManifest records an excluding rule tag and strips it from the embedde
 
 test('buildManifest sorts the codes of a tag', () => {
   withCorpus(
-    { skills: { demo: { 'SKILL.md': skillMd('country: US, KR') } }, rules: { r: ruleMdc('country: -US, -KR') } },
+    { skills: { demo: { 'SKILL.md': skillMd('country: -US, -KR') } }, rules: { r: ruleMdc('country: US, KR') } },
     (root) => {
       const manifest = buildManifest({ rootDir: root });
-      assert.deepEqual(manifest.skills[0].country, { include: ['KR', 'US'] });
-      assert.deepEqual(manifest.rules[0].country, { exclude: ['KR', 'US'] });
+      assert.deepEqual(manifest.skills[0].country, { exclude: ['KR', 'US'] });
+      assert.deepEqual(manifest.rules[0].country, { include: ['KR', 'US'] }, 'a RULE may carry an include list');
     }
   );
 });
@@ -432,11 +436,11 @@ test('changing only a country tag moves manifest.version', () => {
   const version = (tagLine) =>
     withCorpus({ skills: { demo: { 'SKILL.md': skillMd(tagLine) } } }, (root) => buildManifest({ rootDir: root }).version);
   const untagged = version(null);
-  const kr = version('country: KR');
-  const us = version('country: US');
   const notKr = version('country: -KR');
-  assert.equal(new Set([untagged, kr, us, notKr]).size, 4, 'every distinct tag is a distinct version');
-  assert.equal(version('country: KR'), kr, 'and the same tag is the same version');
+  const notUs = version('country: -US');
+  const notBoth = version('country: -KR, -US');
+  assert.equal(new Set([untagged, notKr, notUs, notBoth]).size, 4, 'every distinct tag is a distinct version');
+  assert.equal(version('country: -KR'), notKr, 'and the same tag is the same version');
 });
 
 test('countryReport is silent for an untagged corpus and flags a reference into a restricted entry', () => {
@@ -446,20 +450,22 @@ test('countryReport is silent for an untagged corpus and flags a reference into 
   );
   withCorpus(
     {
-      skills: { 'weegloo-kr-only': { 'SKILL.md': skillMd('country: KR') } },
+      // A variants-only skill: it exists only in KR.
+      skills: { 'weegloo-kr-only': { 'variants/kr/SKILL.md': variantMd('weegloo-kr-only', 'country: KR') } },
       // Untagged (every country), yet routes to a skill that exists only in KR.
       rules: { 'weegloo-router': `${ruleMdc()}See weegloo-kr-only for postcodes.\n` },
     },
     (root) => {
       const lines = countryReport(buildManifest({ rootDir: root }));
       assert.equal(lines[0], 'country-restricted: 1 skill(s), 0 rule(s)');
-      assert.match(lines[1], /^WARNING: 1 reference/);
+      assert.equal(lines[1], 'country variants: weegloo-kr-only (kr: KR)');
+      assert.match(lines[2], /^WARNING: 1 reference/);
       assert.equal(
-        lines[2],
+        lines[3],
         '  rule weegloo-router names skill weegloo-kr-only, but is installed where skill weegloo-kr-only is not (* ⊄ KR)'
       );
-      assert.match(lines[3], /actionable without its target.*§1\.3-4/);
-      assert.equal(lines.length, 4);
+      assert.match(lines[4], /actionable without its target.*§1\.3-4/);
+      assert.equal(lines.length, 5);
     }
   );
 });
@@ -468,6 +474,9 @@ test('the real repo build embeds no country: line in any SKILL.md or rule frontm
   const manifest = buildManifest({ rootDir: REPO_ROOT });
   const bodies = [
     ...manifest.skills.map((s) => [`skill '${s.id}'`, s.files['SKILL.md']]),
+    ...Object.entries(manifest.variants ?? {}).flatMap(([id, list]) =>
+      list.map((v) => [`skill '${id}' variant '${v.name}'`, v.files['SKILL.md']])
+    ),
     ...manifest.rules.map((r) => [`rule '${r.id}'`, r.content]),
   ];
   for (const [label, body] of bodies) {
@@ -477,4 +486,128 @@ test('the real repo build embeds no country: line in any SKILL.md or rule frontm
     assert.equal(found.country, null, `${label}: embedded body still parses as tagged`);
     assert.equal(found.text, body, `${label}: embedded body still carries a country: line`);
   }
+});
+
+// ── Country variants (`variants/<name>/SKILL.md`) ───────────────────────────────────────
+//
+// One skill name, a different body per country. The four layouts the rule allows:
+//   1. top-level SKILL.md, no tag         2. top-level SKILL.md, `country: -KR`
+//   3. only variants (`country: KR, US`)  4. top level + variants/a (KR) + variants/b (US)
+// A variant is a COMPLETE version: only its own folder installs, so its files are its own.
+
+test('buildManifest: the four layouts become top-level entries plus a variants map', () => {
+  withCorpus(
+    {
+      skills: {
+        'weegloo-all': { 'SKILL.md': skillMd() },
+        'weegloo-not-kr': { 'SKILL.md': skillMd('country: -KR') },
+        'weegloo-kr-us': { 'variants/krus/SKILL.md': variantMd('weegloo-kr-us', 'country: KR, US') },
+        'weegloo-split': {
+          'SKILL.md': skillMd(),
+          'references/default.md': 'default page\n',
+          'variants/a/SKILL.md': variantMd('weegloo-split', 'country: KR', '# A'),
+          'variants/a/references/a.md': 'a page\n',
+          'variants/b/SKILL.md': variantMd('weegloo-split', 'country: US', '# B'),
+        },
+      },
+    },
+    (root) => {
+      const m = buildManifest({ rootDir: root });
+      // Top-level entries: everything with a top-level SKILL.md, and nothing else.
+      assert.deepEqual(m.skills.map((s) => s.id), ['weegloo-all', 'weegloo-not-kr', 'weegloo-split']);
+      assert.deepEqual(m.skills.find((s) => s.id === 'weegloo-not-kr').country, { exclude: ['KR'] });
+      const split = m.skills.find((s) => s.id === 'weegloo-split');
+      assert.deepEqual(Object.keys(split.files).sort(), ['SKILL.md', 'references/default.md'], 'variants/ is not a top-level file');
+
+      assert.deepEqual(Object.keys(m.variants), ['weegloo-kr-us', 'weegloo-split']);
+      assert.deepEqual(m.variants['weegloo-kr-us'], [
+        { name: 'krus', country: { include: ['KR', 'US'] }, files: { 'SKILL.md': variantMd('weegloo-kr-us', null) } },
+      ]);
+      const [a, b] = m.variants['weegloo-split'];
+      assert.deepEqual([a.name, a.country, Object.keys(a.files).sort()], ['a', { include: ['KR'] }, ['SKILL.md', 'references/a.md']]);
+      assert.equal(a.files['SKILL.md'], variantMd('weegloo-split', null, '# A'), 'the country line is stripped from a variant too');
+      assert.deepEqual([b.name, b.country, Object.keys(b.files)], ['b', { include: ['US'] }, ['SKILL.md']]);
+    }
+  );
+});
+
+test('buildManifest: no variants → no variants key, and the version does not move', () => {
+  withCorpus({ skills: { demo: { 'SKILL.md': skillMd() } } }, (root) => {
+    const m = buildManifest({ rootDir: root });
+    assert.ok(!('variants' in m));
+  });
+  const version = (files) => withCorpus({ skills: { 'weegloo-x': files } }, (root) => buildManifest({ rootDir: root }).version);
+  const base = version({ 'SKILL.md': skillMd() });
+  const withA = version({ 'SKILL.md': skillMd(), 'variants/a/SKILL.md': variantMd('weegloo-x', 'country: KR', 'one') });
+  const withA2 = version({ 'SKILL.md': skillMd(), 'variants/a/SKILL.md': variantMd('weegloo-x', 'country: KR', 'two') });
+  assert.equal(new Set([base, withA, withA2]).size, 3, 'adding or editing a variant moves the version');
+});
+
+test('buildManifest refuses an include list on the top-level SKILL.md (that is a variant)', () => {
+  for (const tag of ['country: KR', 'country: KR, US']) {
+    withCorpus({ skills: { demo: { 'SKILL.md': skillMd(tag) } } }, (root) => {
+      assert.throws(() => buildManifest({ rootDir: root }), /skill 'demo': 'country: KR.*' does not belong on the top-level SKILL\.md — put that version in variants\/<name>\/SKILL\.md/, tag);
+    });
+  }
+});
+
+test('buildManifest refuses a malformed variant', () => {
+  const cases = [
+    [{ 'variants/a/SKILL.md': variantMd('weegloo-other', 'country: KR') }, /variant 'a': SKILL\.md has name 'weegloo-other' — a variant installs AS 'weegloo-x'/],
+    [{ 'variants/a/SKILL.md': variantMd('weegloo-x', null) }, /variant 'a': SKILL\.md needs the countries it serves/],
+    [{ 'variants/a/SKILL.md': variantMd('weegloo-x', 'country: -KR') }, /variant 'a': SKILL\.md needs the countries it serves/],
+    [{ 'variants/a/SKILL.md': variantMd('weegloo-x', 'country: "*"') }, /variant 'a': SKILL\.md needs the countries it serves/],
+    [{ 'variants/a/references/x.md': 'page' }, /variant 'a' has no SKILL\.md/],
+    [
+      {
+        'variants/a/SKILL.md': variantMd('weegloo-x', 'country: KR, JP'),
+        'variants/b/SKILL.md': variantMd('weegloo-x', 'country: US, KR'),
+      },
+      /variants 'a' and 'b' both serve KR — a country gets exactly one version/,
+    ],
+    [{ 'variants/stray.md': 'x' }, /a file directly under variants\/ belongs to no variant/],
+    [{ 'variants/a/variants/b/SKILL.md': variantMd('weegloo-x', 'country: KR') }, /variants cannot be nested/],
+    [{ 'variants/k.r/SKILL.md': variantMd('weegloo-x', 'country: KR') }, /variant folder name 'k\.r'/],
+    [
+      { 'variants/a/SKILL.md': variantMd('weegloo-x', 'country: KR'), 'variants/a/references/x.md': '---\ncountry: US\n---\n' },
+      /variant 'a' file 'variants\/a\/references\/x\.md': 'country:' belongs in SKILL\.md frontmatter/,
+    ],
+  ];
+  for (const [files, pattern] of cases) {
+    withCorpus({ skills: { 'weegloo-x': { 'SKILL.md': skillMd(), ...files } } }, (root) => {
+      assert.throws(() => buildManifest({ rootDir: root }), pattern, Object.keys(files).join(' + '));
+    });
+  }
+});
+
+test('buildManifest: a variants-only skill may hold nothing else at the top level', () => {
+  withCorpus(
+    { skills: { 'weegloo-x': { 'metadata.json': '{}', 'variants/kr/SKILL.md': variantMd('weegloo-x', 'country: KR') } } },
+    (root) => {
+      assert.throws(() => buildManifest({ rootDir: root }), /skill 'weegloo-x': metadata\.json would never be installed/);
+    }
+  );
+  withCorpus({ skills: { 'weegloo-x': { 'metadata.json': '{}' } } }, (root) => {
+    assert.throws(() => buildManifest({ rootDir: root }), /skill 'weegloo-x' has no SKILL\.md/);
+  });
+});
+
+test('countryReport: a variant is its own referrer, installed only where it serves', () => {
+  withCorpus(
+    {
+      skills: {
+        'weegloo-kr-only': { 'variants/kr/SKILL.md': variantMd('weegloo-kr-only', 'country: KR') },
+        // KR gets the variant (it may name the KR-only skill); the top level must not.
+        'weegloo-pay': {
+          'SKILL.md': skillMd(),
+          'variants/kr/SKILL.md': variantMd('weegloo-pay', 'country: KR', 'see weegloo-kr-only'),
+        },
+      },
+    },
+    (root) => {
+      const lines = countryReport(buildManifest({ rootDir: root }));
+      assert.equal(lines[1], 'country variants: weegloo-kr-only (kr: KR), weegloo-pay (kr: KR; top level: the rest)');
+      assert.ok(!lines.some((l) => l.startsWith('WARNING')), 'a KR-only variant naming a KR-only skill is fine');
+    }
+  );
 });

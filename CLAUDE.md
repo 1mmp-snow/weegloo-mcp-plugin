@@ -29,7 +29,7 @@
 | 룰을 고치거나 압축한다 | [§3.6](#36-룰-수정--압축) | GATE-INVENTORY + **룰 변경은 단건 측정** |
 | 같은 사실이 두 파일에 생긴다 | [§3.7](#37-사실fact-이동과-중복) | FACT-OWNERS 등록 |
 | 파일명·경로를 정한다 | [§2.7](#27-파일명--경로-하드-제약-installer가-강제) | installer 정규식이 빌드에서 막는다 |
-| 스킬·룰을 특정 국가에만(또는 특정 국가만 빼고) 설치되게 한다 | [§2.8](#28-국가-태그-country--특정-국가에만-설치) | 태그도 skill·rule 편집이다 — §3.0 확인 먼저 |
+| 스킬·룰을 특정 국가에만(또는 특정 국가만 빼고) 설치되게 하거나, 나라마다 다른 내용을 넣는다 | [§2.8](#28-국가-태그-country와-국가별-변형--특정-국가에만-설치) | 태그·변형도 skill·rule 편집이다 — §3.0 확인 먼저 |
 | 테스트·측정을 돌린다 | [§5](#5-가드레일과-측정) | "측정 못 함"을 "이상 없음"으로 바꾸지 말 것 |
 | 배포·릴리스한다 | [§6](#6-배포-파이프라인) | 매니페스트 → 테스트 → 측정 → 커밋 순서, **커밋은 사용자 승인 후** |
 
@@ -128,13 +128,14 @@ L0 + L1이 **항상 로딩 예산**이다. 룰에 한 문장을 더하면 Weeglo
 plugins/weegloo/skills/<skill-id>/
 ├── SKILL.md            # frontmatter(name, description) + spine
 ├── metadata.json       # {name, version, author, license}
-└── references/         # 선택. spine이 타지 않는 분기 하나당 파일 하나
-    └── <topic>.md
+├── references/         # 선택. spine이 타지 않는 분기 하나당 파일 하나
+│   └── <topic>.md
+└── variants/<name>/    # 선택. 나라별 대체본 — 위 구조 한 벌을 통째로 (§2.8)
 ```
 
 - `<skill-id>`는 `weegloo-` 접두사 + kebab-case. installer의 디스크 탐지가 이 접두사를 본다.
-- **빈 스킬 디렉터리는 빌드 에러**다(매니페스트 빌더가 거부). 파일이 최소 하나 있어야 한다.
-- 이 세 가지 외의 파일 종류는 현재 없다. 새 종류를 도입하려면 §2.7의 경로 제약을 먼저 확인한다.
+- **빈 스킬 디렉터리는 빌드 에러**다(매니페스트 빌더가 거부). 최상위 `SKILL.md` 나 변형이 최소 하나 있어야 한다.
+- 이 네 가지 외의 파일 종류는 현재 없다. 새 종류를 도입하려면 §2.7의 경로 제약을 먼저 확인한다.
 
 ### 2.2 `SKILL.md` frontmatter — `description`은 요약이 아니라 **라우팅 트리거**
 
@@ -237,25 +238,54 @@ description: <트리거 문장> … 권한, 역할, 접근 제어, 관리자 권
 
 → **reference 파일명은 ASCII 소문자 kebab-case + `.md` 하나**로 쓴다.
 
-### 2.8 국가 태그 (`country:`) — 특정 국가에만 설치
+### 2.8 국가 태그 (`country:`)와 국가별 변형 — 특정 국가에만 설치
 
-스킬의 `SKILL.md`·룰의 `.mdc` frontmatter 에 **최상위 키 한 줄**을 달면, installer 가 클라이언트의
-국가에서 통용되는 것만 설치한다. 설계·기각한 대안: `installer-cli/docs/country-filter.md`.
+`SKILL.md`·룰 `.mdc` frontmatter 의 **최상위 키 한 줄** `country:` 와 스킬의 `variants/<name>/` 폴더로,
+installer 가 클라이언트의 국가에 맞는 것만 설치한다. 설계·기각한 대안: `installer-cli/docs/country-filter.md`.
 
-```markdown
----
-name: <skill-id>
-description: …
-country: KR
----
-```
-
-| 표기 | 설치되는 곳 |
+| 값 표기 | 뜻 |
 |---|---|
 | (키 생략) · `country:` (코드 없음 — 빈 값, `""`, 주석뿐) | **모든 국가** — 기본값 |
-| `country: KR` · `KR, US, CA` | 이 나라들에서만 |
+| `country: KR` · `KR, US, CA` | 이 나라들 |
 | `country: -KR` · `-KR, -JP` | 이 나라들만 빼고 |
 | `country: "*"` | 모든 국가(생략과 같다) — **따옴표 필수** |
+
+**스킬은 네 가지 배치 중 하나다.** 부모(라우터)는 스킬을 **이름 하나**로 부르므로, 나라마다 내용이 다른
+스킬은 이름이 같은 스킬 둘이 아니라 **한 스킬 안의 변형**으로 만든다.
+
+```
+skills/<skill-id>/
+├── SKILL.md                 ← 최상위 = 기본 버전 (태그 없음, 또는 제외 태그만)
+├── references/…
+└── variants/<name>/         ← 변형 = 그 나라들용 완전한 대체본
+    ├── SKILL.md             ←   name: <skill-id>   country: KR
+    └── references/…
+```
+
+| 배치 | KR | US | JP | 국가 모름 |
+|---|---|---|---|---|
+| 1. 최상위 `SKILL.md`, 태그 없음 | 최상위 | 최상위 | 최상위 | 최상위 |
+| 2. 최상위 `SKILL.md`, `country: -KR` | 설치 안 함 | 최상위 | 최상위 | 최상위 |
+| 3. 최상위 없음, `variants/a` (`country: KR, US`) | a | a | 설치 안 함 | **설치 안 함** |
+| 4. 최상위 + `variants/a` (`KR`) + `variants/b` (`US`) | a | b | 최상위 | 최상위 |
+
+판정: **그 나라를 포함하는 변형 → 없으면 최상위(태그가 허용할 때) → 없으면 설치 안 함.** 국가를 모르면 변형은
+고르지 않는다(최상위만 설치, fail-open).
+
+- **변형은 통째 교체다.** 그 폴더만 설치되고 최상위 파일과 섞이지 않는다 — 공통 내용도 변형에 다시 쓴다.
+  변형 `SKILL.md` 의 `name:` 은 스킬 id 와 같아야 하고(그 이름으로 설치된다), `country:` 는 **포함 목록 필수**.
+- **최상위 `SKILL.md` 의 포함 목록(`country: KR`)은 빌드 에러** — 태그 없음 또는 제외(`-KR`)만. 포함은 변형의 몫.
+  룰(`.mdc` 한 파일)에는 변형이 없으므로 포함·제외 태그를 모두 쓴다.
+- 변형끼리 같은 나라, 중첩 `variants/`, `variants/` 바로 아래의 파일은 빌드 에러. 폴더명은 `[A-Za-z0-9_-]`.
+  최상위 `SKILL.md` 가 없으면 스킬 폴더에는 `variants/` 만 둔다 — 다른 파일은 설치될 곳이 없어 빌드 에러.
+- **최상위와 변형은 서로를 언급하지 않는다** — 디스크에는 한 번에 하나만 있다. 부모·룰은 스킬을 이름으로만
+  부르고, **변형마다 다른 사실(어느 PG 인지 등)을 적지 않는다** — 적으면 다른 나라 설치본과 모순된다.
+- 변형의 `description` 도 그 나라에서 매 세션 로딩된다 — 700 B 캡이 같이 걸린다(`budgets.test.js`).
+- **마켓플레이스와 구 CLI 는 최상위만 본다.** 마켓플레이스는 `skills/<id>/SKILL.md` 만 읽고, 지금 게시된 CLI 는
+  매니페스트의 `variants` 를 무시한다 — 둘 다 3번 스킬이 **어느 나라에서도 없다**(구 CLI 는 설치돼 있던 것을 다음
+  update 에서 prune 한다). 3번 스킬을 `latest` 에 내보내기 전에 변형을 아는 CLI 를 npm 에 배포한다.
+
+값 표기 규칙:
 
 - 코드는 **대문자 ISO 3166-1 alpha-2**, 쉼표로 구분(쉼표 뒤 공백은 선택). 값은 **키와 같은 줄에만** 쓴다 —
   다음 줄로 이어 쓴 값(블록 목록 `  - KR` 등)은 빌드 에러다. 빌더는 그 한 줄만 읽으므로, 막지 않으면
@@ -264,22 +294,23 @@ country: KR
   마켓플레이스는 **원본 파일을 직접** 읽는다 — 그래서 빌더가 거부한다.
 - **`description` 앞에 붙이지 않는다**(`description: [KR] …`). 따옴표 없는 `[` 는 flow sequence 라
   frontmatter 파싱이 실패하고, harness 는 name·description 을 함께 잃는다 — 스킬이 발화하지 않고 에러도 없다.
-- **자리는 frontmatter 의 열 0 최상위 키뿐, 스킬은 `SKILL.md` 에만.** `references/`·`metadata.json` 의 태그와
+- **자리는 frontmatter 의 열 0 최상위 키뿐, 스킬은 `SKILL.md`(최상위·변형)에만.** `references/`·`metadata.json` 의 태그와
   유사 키(`Country:`, `countries:`, 들여쓴 `country:`)는 무시가 아니라 **빌드 에러**다 — 무시하면 저자는
   제한했다고 믿는데 전 국가에 설치된다. 단위는 스킬·룰 통째다 — 파일 하나·문단 하나는 가를 수 없다.
 - **코어 룰(`weegloo-version`, `weegloo-terms-consent`)은 태그 금지** — 빌더가 거부하고, installer 도 필터에서 뺀다.
-- 빌더가 줄을 **지우고** 매니페스트 엔트리의 `country` 필드로 옮긴다(§6.1) — 설치본에는 그 줄이 없다.
-  태그만 바꿔도 매니페스트 `version` 이 바뀐다 → **매니페스트 재생성 필수**(§6.3-3).
+- 빌더가 줄을 **지우고** 매니페스트 엔트리의 `country` 필드로, 변형은 최상위 `variants` 맵으로 옮긴다(§6.1) —
+  설치본에는 그 줄도 `variants/` 폴더도 없다. 태그·변형만 바꿔도 매니페스트 `version` 이 바뀐다 →
+  **매니페스트 재생성 필수**(§6.3-3).
 - 국가: install 은 `--country` > `WEEGLOO_COUNTRY` > 조회(`ai.weegloo.com/v1/country`). **조회 실패 = 필터 없음**
   (전부 설치, fail-open). `--update` 는 **기록된 국가를 재사용**하고 `--country` 로만 바뀐다 — 기록이 없으면 1회 조회.
-- 마켓플레이스 경로(`.claude-plugin`·`.cursor-plugin`)에는 필터가 없다 — 태그된 스킬도 전 국가에 간다.
+- 마켓플레이스 경로(`.claude-plugin`·`.cursor-plugin`)에는 필터가 없다 — 최상위는 태그가 있어도 전 국가에 간다.
 - **통째로 빠진 스킬을 가리키는 줄은 남는다.** 라우터(`weegloo-platform-integration`)·`weegloo-global-rules` 의
   라우팅 줄이 그 스킬을 이름으로 부르면, 그 나라 세션은 디스크에 없는 스킬로 안내된다. 그 줄은 그 나라에서
   **링크 없이도 행동 가능**해야 한다(§1.3-4). 빌더가 stderr 에 `WARNING: … reference(s) to a country-restricted
   skill/rule` 목록을 찍지만 **빌드는 실패하지 않는다** — 목록을 읽고 한 줄씩 판정한다.
-- fixtures(§5.2)는 설치된 코퍼스를 재므로, 태그가 있으면 **측정 장비에 기록된 국가**의 코퍼스를 잰다.
-- **태그를 달거나 바꾸는 것도 skill·rule 편집이다 — §3.0 확인 먼저.** 태그 한 줄이 다음 `--update` 에서
-  제외된 나라 사용자 모두의 디스크에서 그 스킬을 지운다.
+- fixtures(§5.2)는 설치된 코퍼스를 재므로, 태그·변형이 있으면 **측정 장비에 기록된 국가**의 코퍼스를 잰다.
+- **태그를 달거나 바꾸는 것, 변형을 만드는 것도 skill·rule 편집이다 — §3.0 확인 먼저.** 태그 한 줄이 다음
+  `--update` 에서 제외된 나라 사용자 모두의 디스크에서 그 스킬을 지운다.
 
 ---
 
@@ -435,9 +466,9 @@ country: KR
 |---|---|---|
 | `budgets.test.js` | 룰 파일별 바이트 캡, `description` ≤ 700 B, 캡 미등록 룰, GATE-INVENTORY 조각 존재 | 그 문장이 여전히 옳은 뜻인지 |
 | `fact-owners.test.js` | §4.2의 세 축 | 등록된 두 파일 사이의 모순 |
-| `manifest.test.js` | 스킬 하위 디렉터리가 **중첩 키**로 매니페스트에 실리는지, 결정성, `country:` 줄 제거·구조 필드·거부(코어 룰, `references/`, 유사 키, bare `*`, 대괄호) (§2.8) | — |
+| `manifest.test.js` | 스킬 하위 디렉터리가 **중첩 키**로 매니페스트에 실리는지, 결정성, `country:` 줄 제거·구조 필드·거부(코어 룰, `references/`, 유사 키, bare `*`, 대괄호), 변형 배치 네 가지와 그 거부(최상위 포함 태그, `name` 불일치, 나라 겹침, 중첩) (§2.8) | — |
 | `io.test.js` | 중첩 파일 설치·clean-sync·삭제, 경로 이탈 거부 (§6.2) | — |
-| `country.test.js` | 태그 문법(허용 형태·거부 목록), frontmatter 추출·유사 키, 매니페스트 필드 검증, 필터(코어 예외·모름 = 통과), 국가 결정 순서(`--country` > 기록 > 조회), 참조 공백 탐지 (§2.8) | 태그가 **옳은 나라**인지, 가리키는 줄이 대상 없이 행동 가능한지 |
+| `country.test.js` | 태그 문법(허용 형태·거부 목록), frontmatter 추출·유사 키, 매니페스트 필드·`variants` 검증, 필터(코어 예외·모름 = 통과), 변형 선택(배치 네 가지 × 나라·모름), 국가 결정 순서(`--country` > 기록 > 조회), 참조 공백 탐지 (§2.8) | 태그가 **옳은 나라**인지, 가리키는 줄이 대상 없이 행동 가능한지 |
 | `country-source.test.js` | 국가 조회의 fail-open(5xx·비 JSON·`XX`·throw → 모름), `Accept` 헤더 없음, 매니페스트 `country` 필드 통과·생략·손상 시 거부 | 실제 엔드포인트의 응답과 IP 추정의 정확도(`fetch` 는 mock) |
 | `tests/fixtures/routing/` | **행동** — 유일하게 그것을 잡는 것(§5.2) | 아무 fixture도 묻지 않는 것 |
 
@@ -493,7 +524,7 @@ CI에 없는 통제 둘(각각 CI가 갖지 못한 비용을 치른다):
 ```
 plugins/weegloo/{skills,rules}          ← 편집
         ↓  scripts/build-installer-manifest.mjs   (로컬 실행 또는 CI)
-plugins/weegloo/installer-manifest.json ← 전 파일 본문을 그대로 임베드(`country:` 줄만 제외) + content version
+plugins/weegloo/installer-manifest.json ← 전 파일 본문을 그대로 임베드(`country:` 줄만 제외, 변형은 `variants` 맵) + content version
         ↓  raw.githubusercontent.com/<repo>/<branch>/…  (단일 요청, GitHub API 미사용)
 npx weegloo (installer-cli)             ← 매니페스트만 읽고 디스크에 씀
         ↓
@@ -509,6 +540,9 @@ npx weegloo (installer-cli)             ← 매니페스트만 읽고 디스크�
   있다 — 빌더가 frontmatter 의 `country:` 줄을 **본문에서 지우고** 옮긴 것이다(§2.8). 제한하지 않으면 키가
   없으므로, 태그 없는 코퍼스의 매니페스트는 바이트 그대로다. `schemaVersion` 은 1 그대로이고, 구 CLI 는 이
   필드를 무시해 전부 설치한다.
+- 스킬의 변형은 `skills` 가 아니라 최상위 **`variants` 맵**(`{ "<skill-id>": [ { name, country, files } ] }`)에
+  실린다 — 변형이 있을 때만 키가 생긴다. `skills` 에는 최상위 `SKILL.md` 가 있는 스킬만 있으므로 구 CLI 도
+  유효한 매니페스트를 읽는다(최상위만 설치, 변형만 있는 스킬은 없음 — §2.8).
 - 설치 기록은 **id 단위**다(`skills: [...]`, `rules: [...]`, `availableSkills/Rules`). 파일 목록은
   기록하지 않는다 — 그래서 깊이가 늘어나도 기록 포맷은 영향받지 않는다. 국가는 `country` 한 키로
   기록된다(필터링에 쓴 국가; 모르면 키 없음).

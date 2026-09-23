@@ -153,13 +153,16 @@ export function applyOriginMapping(content, origins) {
 }
 
 /**
- * 매니페스트 리소스 전체(스킬 파일들 + 룰 content + MCP URL)에 매핑 적용 — 새 객체 반환.
+ * 매니페스트 리소스 전체(스킬 파일들 + 국가 변형 파일들 + 룰 content + MCP URL)에 매핑 적용 — 새 객체 반환.
  * weegloo-version 룰의 placeholder는 여기서 안 건드려짐(호스트가 없는 토큰) — 치환된 체크
  * URL은 applySelfUpdateTemplate이 굽는 시점에 매핑된다(self-update.js).
+ * 국가 변형(`variants`)도 여기서 매핑해야 한다 — 변형 선택(filterResourcesByCountry)은 이 뒤에
+ * 일어나므로, 빠뜨리면 변형이 설치되는 나라에서만 프로덕션 호스트가 남는다.
  */
 export function applyOriginsToResources(resources, origins) {
   if (!origins) return resources;
   const map = (s) => (typeof s === 'string' ? applyOriginMapping(s, origins) : s);
+  const mapFiles = (files) => Object.fromEntries(Object.entries(files).map(([name, body]) => [name, map(body)]));
   return {
     ...resources,
     // mcp is absent in update-flow fixtures (updates never touch MCP config) — map when present.
@@ -170,10 +173,12 @@ export function applyOriginsToResources(resources, origins) {
         uploadApiUrl: map(resources.mcp.uploadApiUrl),
       },
     }),
-    skills: resources.skills.map((skill) => ({
-      ...skill,
-      files: Object.fromEntries(Object.entries(skill.files).map(([name, body]) => [name, map(body)])),
-    })),
+    skills: resources.skills.map((skill) => ({ ...skill, files: mapFiles(skill.files) })),
+    ...(resources.variants && {
+      variants: Object.fromEntries(
+        Object.entries(resources.variants).map(([id, list]) => [id, list.map((v) => ({ ...v, files: mapFiles(v.files) }))])
+      ),
+    }),
     rules: resources.rules.map((rule) => ({ ...rule, content: map(rule.content) })),
   };
 }

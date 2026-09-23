@@ -1272,3 +1272,82 @@ test('countryReportLines: known country with/without exclusions, unknown warning
     )
   );
 });
+
+// ── country variants on update: same skill id, the body follows the country ────────────────
+
+const VARIANT_MANIFEST = {
+  version: 'v3',
+  skills: [{ id: 'weegloo-pay', files: { 'SKILL.md': 'stripe v3', 'references/stripe.md': 'stripe page' } }],
+  rules: [
+    { id: 'weegloo-version', content: 'version-rule' },
+    { id: 'weegloo-terms-consent', content: 'terms-rule' },
+  ],
+  variants: {
+    'weegloo-pay': [{ name: 'toss', country: { include: ['KR'] }, files: { 'SKILL.md': 'toss v3' } }],
+    'weegloo-postcode': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'kakao v3' } }],
+  },
+};
+const loadVariantManifest = async () => VARIANT_MANIFEST;
+
+function seedVariantInstall({ skills, country }) {
+  seedClaude({
+    skills,
+    rules: ['weegloo-version', 'weegloo-terms-consent'],
+    record: {
+      skills,
+      rules: ['weegloo-version', 'weegloo-terms-consent'],
+      availableSkills: ['weegloo-pay'],
+      availableRules: ['weegloo-version', 'weegloo-terms-consent'],
+      ...(country ? { country } : {}),
+    },
+    stamp: { last_check: 'x', version: 'v2', ref: 'latest' },
+  });
+}
+
+test('runUpdate: KR gets the KR variant — whole skill replaced — and a KR-only skill as new', async () => {
+  await inTmpProject(async () => {
+    seedVariantInstall({ skills: ['weegloo-pay'], country: 'KR' });
+    const lines = [];
+    await runUpdate(
+      { update: true, agent: 'claude', scope: 'project', nonInteractive: true },
+      { loadResourcesFn: loadVariantManifest, ...quiet, log: (s) => lines.push(String(s)) }
+    );
+    assert.equal(fs.readFileSync('.claude/skills/weegloo-pay/SKILL.md', 'utf-8'), 'toss v3');
+    assert.equal(fs.existsSync('.claude/skills/weegloo-pay/references'), false, 'no top-level file mixed into the variant');
+    assert.equal(fs.readFileSync('.claude/skills/weegloo-postcode/SKILL.md', 'utf-8'), 'kakao v3', 'KR-only skill auto-added as new');
+    assert.ok(lines.some((l) => l.includes('KR version: weegloo-pay (toss), weegloo-postcode (kr)')));
+    const rec = readInstalledRecord('.weegloo/claude/installed.json');
+    assert.deepEqual(rec.skills, ['weegloo-pay', 'weegloo-postcode']);
+  });
+});
+
+test('runUpdate: --country US switches the same skill back to the top level and drops the KR-only one', async () => {
+  await inTmpProject(async () => {
+    seedVariantInstall({ skills: ['weegloo-pay', 'weegloo-postcode'], country: 'KR' });
+    await runUpdate(
+      { update: true, agent: 'claude', scope: 'project', nonInteractive: true, country: 'US' },
+      { loadResourcesFn: loadVariantManifest, ...quiet }
+    );
+    assert.equal(fs.readFileSync('.claude/skills/weegloo-pay/SKILL.md', 'utf-8'), 'stripe v3');
+    assert.equal(fs.readFileSync('.claude/skills/weegloo-pay/references/stripe.md', 'utf-8'), 'stripe page');
+    assert.equal(fs.existsSync('.claude/skills/weegloo-postcode'), false, 'variants-only skill pruned outside KR');
+    const rec = readInstalledRecord('.weegloo/claude/installed.json');
+    assert.equal(rec.country, 'US');
+    assert.deepEqual(rec.skills, ['weegloo-pay']);
+  });
+});
+
+test('runUpdate: country unknown → top level installs, a variants-only skill does not (and is pruned)', async () => {
+  await inTmpProject(async () => {
+    seedVariantInstall({ skills: ['weegloo-pay', 'weegloo-postcode'], country: null });
+    const lines = [];
+    await runUpdate(
+      { update: true, agent: 'claude', scope: 'project', nonInteractive: true },
+      { loadResourcesFn: loadVariantManifest, ...quiet, fetchCountryFn: async () => null, log: (s) => lines.push(String(s)) }
+    );
+    assert.equal(fs.readFileSync('.claude/skills/weegloo-pay/SKILL.md', 'utf-8'), 'stripe v3');
+    assert.equal(fs.existsSync('.claude/skills/weegloo-postcode'), false);
+    assert.ok(lines.some((l) => l.includes('every skill/rule except country-only ones')));
+    assert.ok(lines.some((l) => l.includes('Skipped (country-only, no default version): 1 skill(s) (weegloo-postcode)')));
+  });
+});
