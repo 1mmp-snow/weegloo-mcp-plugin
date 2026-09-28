@@ -112,9 +112,11 @@ Stripe-Signature: t=1492774577,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56
 
 **Other providers** sign differently. This is the **shape → statement** vocabulary to map onto
 whatever their docs describe — start by extracting four things from their signature documentation:
-which header carries the code, exactly what bytes are signed, hex vs base64 (`Signature` accepts
-either, so this is diagnostic only), and how the secret itself was issued (this one you *must* act on
-via `secretEncoding` — the wrong choice is a different key and never matches).
+which header carries the code, exactly what bytes are signed, hex vs base64, and how the secret
+itself was issued (this one you *must* act on via `secretEncoding` — the wrong choice is a different
+key and never matches). Hex vs base64 is diagnostic only for `Signature`, which accepts either; a
+`Hash` must set `encoding` (`Hex` **default** | `HexUpper` | `Base64` | `Base64Url`) to the
+provider's exact form, case included, or its `$===` compare fails every delivery.
 
 | The scheme's shape | Statements |
 |---|---|
@@ -122,12 +124,15 @@ via `secretEncoding` — the wrong choice is a different key and never matches).
 | Signing key issued **hex**- or **base64**-encoded | `Signature` + `secretEncoding: "Hex"` / `"Base64"` |
 | Signature header packs several values, e.g. `t=…,v1=…` (Stripe) or `ts=…;h1=…` | `Regex` `Capture` → `Signature` over the assembled message |
 | Signed message joins values from **separate** headers | `Signature` over `"{ /headers/a }.{ /headers/b }.{ /rawPayload }"` |
-| **Keyless** salted digest — a hash of concatenated fields *including* a shared secret | `Hash` + compare with `$===` |
-| Legacy `MD5(…)` digest | `Hash` with `algorithm: "MD5"` |
+| **Keyless** salted digest — a hash of concatenated fields *including* a shared secret | `Hash` with `encoding` matching the provider's form + compare with `$===` |
+| Legacy `MD5(…)` digest | `Hash` with `algorithm: "MD5"`, `encoding` matching the provider's form |
 | Asymmetric signature (RSA/ECDSA), or a scheme requiring a fetched certificate | **not covered** — `Signature` is keyed-hash only; use shape A instead |
 
 `Hash` takes the secret inside `value`, wherever that scheme puts it, and caps the resolved `value` at
-**128 characters** — a long concatenation needs `Signature` instead. Statement fields, `Capture`
+**128 characters**, checked when the statement runs, not at save (over ⇒ it fails with `422`) — so
+size it by the longest value every field and the key can take, not by one test delivery. A scheme
+that can exceed it is **not covered**, like the asymmetric row: `Signature` is an HMAC, a different
+code from a plain digest, so it cannot stand in — use shape A instead. Statement fields, `Capture`
 indexing and the other caps are `weegloo-script`'s.
 
 ## B-4. Replay window

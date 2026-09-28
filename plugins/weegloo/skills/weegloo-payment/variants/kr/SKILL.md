@@ -63,8 +63,13 @@ credentials" — an inert capability is incomplete work.
   passed to `requestPayment` — through it. The order rows on the Weegloo side are yours and
   unaffected.
 - **Anything that needs the user's own Toss account is not reachable on them** — registering a
-  webhook (개발자센터 → 웹훅), changing which payment methods the widget offers. It waits for their own
-  account (§6) and is **not** something you stop and ask for.
+  webhook (개발자센터 → 웹훅), or changing which payment methods the widget offers. It waits for their
+  own account (§6) and is **not** something you stop and ask for.
+- **The widget offers no 가상계좌 (virtual account) on them.** Toss: "가상계좌는 문서용 테스트 키로
+  테스트할 수 없습니다" — it appears only on the store's own test key issued after the 전자결제
+  contract. So the default build has no 가상계좌 order and no deposit notification. §4's 가상계좌
+  branch is still built — it just never runs on them — and the deposit receiver in shape B waits
+  until their keys offer it (§6).
 
 ### 1. Read the docs first — they outrank this file
 
@@ -80,8 +85,7 @@ index; use it exactly the way `weegloo-global-rules` has you use Weegloo's own:
 1. Fetch **https://docs.tosspayments.com/llms.txt**.
 2. Take the **exact** path for the 주문서형 결제 / payment-widget integration guide from that index
    (as of writing, `…/guides/v2/payment-widget/integration.md`).
-3. Fetch that path. Only paths you can point to in `llms.txt` are fair game — do not hand-build,
-   rename, or "try" nearby URLs.
+3. Fetch that path.
 
 That index also lists a **LLM Quick Reference** (`…/guides/v2/get-started/llms-quick-reference.md`)
 and a **배포 체크리스트** — both worth reading if the primary guide is unclear or you are about to hand
@@ -129,14 +133,14 @@ Model it before §3. **`ShortText` stops at 64 characters**, so the split is not
 | `amount` | `Long` | KRW has no minor unit; an integer, never a string |
 | `paymentKey` | **`RichText`** | Toss allows up to **200** characters — past the cap on its own |
 | `receiptUrl` (`receipt.url`) and any provider URL | **`RichText`** | a provider URL is Toss's to shape, not yours |
-| `depositSecret` (the 가상계좌 `secret`), and any other Toss id or token you store | **`RichText`** | the length is Toss's to change, not yours |
+| any other Toss id or token you store — never the 가상계좌 `secret` (§4) | **`RichText`** | the length is Toss's to change, not yours |
 
 `RichText`, not `LongText`: none of these is ever full-text searched — the Script finds the order by
 **your** `orderId`, then reads the provider value by path. A provider id you **query on** (a
 `ResourceFind` keyed on it, such as an idempotency receipt) is the exception: queried ⇒ `LongText`.
 
-A `ShortText` here breaks nothing until Toss issues a `paymentKey` longer than 64 characters (it allows
-up to 200); then §4's `ResourcePatch` answers `/paymentKey/en-US: must not exceed a maximum length of
+A `ShortText` here breaks nothing until Toss issues a `paymentKey` longer than 64 characters; then
+§4's `ResourcePatch` answers `/paymentKey/en-US: must not exceed a maximum length of
 64` **after** the confirm call has already approved the payment — the money moved, and the order still
 reads `pending`.
 
@@ -156,26 +160,19 @@ await Promise.all([
 await widgets.requestPayment({ orderId, orderName, successUrl, failUrl });
 ```
 
-- **Write the order to Weegloo BEFORE `requestPayment()`.** Toss requires `orderId` + `amount` to be
-  stored server-side first, and that stored row is the *only* amount you may trust at confirm time
-  (§4). Create the order Content with `status: "pending"` first, then request payment.
+- **Write the order to Weegloo — `status: "pending"` — BEFORE `requestPayment()`.** Toss requires
+  `orderId` + `amount` to be stored server-side first, and that stored row is the *only* amount you
+  may trust at confirm time (§4).
 - **`customerKey`** — a stable, unguessable per-buyer string for a signed-in Service User; never an
-  email, a sequential id, or anything a stranger could type. Guest checkout uses
-  `TossPayments.ANONYMOUS`.
+  email, a sequential id, or anything a stranger could type.
 - **`successUrl` / `failUrl` must be absolute and actually reachable.** On Weegloo WebHosting that is
   the deployed `…weegloo.app` origin — a **self-resolving** value in step 4's sense: set a placeholder,
   deploy, then patch it. **Do not ask the user for it.**
-- These are **real navigations**, not client-side routes: the success and fail paths must resolve as
-  served URLs. A hash-only SPA router will 404 on them — add the routes to the static export, or
-  configure the SPA fallback, before you call the flow done.
+- These are **real navigations**. A hash-only SPA router will 404 on them — add the routes to the
+  static export, or configure the SPA fallback, before you call the flow done.
 - **The success page calls the confirm Script at once.** The payment must be approved within 10
   minutes of the request (§2); a success page that waits for a click, or a confirm that never runs,
   lets that window lapse.
-- **가상계좌 (virtual account)** is settled by a later deposit, not by confirm: confirm only issues the
-  account (§4), and the order becomes paid from Toss's deposit webhook — shape **B**
-  (`references/callback-receiver.md`). Both ways to handle it — turning 가상계좌 off, or registering
-  that webhook — need the user's own Toss account (§1), so on the documentation keys build the confirm
-  to record such an order as awaiting deposit, and say so in §5.
 
 ### 4. Server — the confirm Script
 
@@ -214,11 +211,40 @@ amount comparison, same write-back:
   The literal above is exactly `base64("test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6:")` — recompute it if
   you use a different key.
 - **Store `paymentKey` and `orderId`** on the order; they are what later lookup and cancellation need.
-- **A 가상계좌 confirm succeeds without paying.** It answers `status: "WAITING_FOR_DEPOSIT"`, not
-  `DONE` — the account was issued and nothing was deposited. After the same amount comparison, record
-  the order as awaiting deposit and store the response's **`secret`** as `depositSecret` (it
-  authenticates the later deposit webhook) instead of answering `402`; mark it paid only from that
-  webhook (shape B).
+- **A 가상계좌 confirm succeeds without paying.** The documentation keys never reach this branch
+  (they offer no 가상계좌), but build it anyway, so that §6 stays a key swap. It answers
+  `status: "WAITING_FOR_DEPOSIT"`, not `DONE` — the account was issued and nothing was deposited.
+  So replace the `else` above with one that takes this case first: after the same amount comparison, patch `status: "awaiting_deposit"`
+  **and `paymentKey`** (the deposit receiver asks Toss about the payment by it — the notification
+  carries none), `Return` only what the buyer deposits into, and answer `402` otherwise:
+
+  ```jsonc
+  "else": [ { "type": "If",
+      "condition": { "and": [
+          { "===": [ "{ /confirmed/body/status }", "WAITING_FOR_DEPOSIT" ] },
+          { "===": [ "{ /confirmed/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
+      "then": [
+        { "type": "ResourcePatch", "resource": "Content",
+          "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
+          "fields": { "status": "awaiting_deposit", "paymentKey": "{ /payload/paymentKey }" } },
+        { "type": "Return", "value": {
+            "bankCode": "{ /confirmed/body/virtualAccount/bankCode }",
+            "accountNumber": "{ /confirmed/body/virtualAccount/accountNumber }",
+            "dueDate": "{ /confirmed/body/virtualAccount/dueDate }",
+            "amount": "{ /order/fields/amount/en-US }" } } ],
+      "else": [ { "type": "Return", "isError": true, "statusCode": 402,
+                  "value": "payment not confirmed" } ] } ]
+  ```
+
+  `bankCode` is Toss's two-digit bank code, not a bank name. Mark the order paid only from the
+  deposit notification (shape B).
+- ⚠️ **Never store the confirm response's `secret`, and never `Return` `{ /confirmed/body }`, which
+  carries it.** Toss's docs verify the deposit notification against a stored copy of that value —
+  the one step of theirs not to follow here. Whoever holds it can post a `DONE` for an order nobody
+  paid, and no row keeps it from the buyer by default: they read their own order, and a row this
+  Script writes is theirs by `sys.createdBy` too (it runs as them), so a `createdBy :self` rule
+  without a `contentType` reaches it, silently. The receiver asks Toss's 결제 조회 API instead and
+  needs no copy (`references/callback-receiver.md` → *The Toss 가상계좌 deposit*).
 - **Guest checkout** has no caller to resolve `:self` against — drop the `createdBy` filter and match
   on `orderId` alone, which then has to be long and random rather than sequential.
 - Toss's own failure codes (`NOT_FOUND_PAYMENT_SESSION`, `REJECT_CARD_COMPANY`, `UNAUTHORIZED_KEY`, …)
@@ -236,21 +262,18 @@ The moment the flow works, say three things plainly, in the user's own language:
    Toss account, or to a contracted PG/MoR, is the swap in §6. **State that it is available; do not
    ask for credentials.** If they want it, they will say so.
 
-If the widget offers 가상계좌, add one plain sentence: those orders stay awaiting deposit until their
-own Toss account registers the deposit webhook (§3).
+If the user asked for 가상계좌, add one plain sentence: the documentation keys do not offer it, and
+it appears once their own Toss keys from a 전자결제 contract are in (§6).
 
-**Put point 2 in red.** It is the one fact whose omission actually costs the user money-handling
-confidence, so it gets the must-know colour (`weegloo-global-rules` → *Highlight what the user must
-act on or must know*) — a `diff` fence, `- ` prefix, in the user's own language:
+**Put point 2 in red** — it is the must-know fact here. Mechanics of the `diff` fence, the `+ ` /
+`- ` markers and keeping the two blocks separate are owned by `weegloo-global-rules` → *Highlight what
+the user must act on or must know*; this is the sentence, in the user's own language:
 
 ```diff
 - 결제는 토스페이먼츠 테스트 키로 동작합니다 — 실제로 청구되는 카드나 계좌는 없습니다.
 ```
 
-The `- ` is the red-rendering marker, not part of the sentence, and the block **never replaces** saying
-it in prose — state the caveat either way, so a plain-text or no-colour surface loses nothing. Points
-1 and 3 stay plain text; the live checkout URL, if you have one, is **green** (`+ `) in its own
-separate block so the two do not read as one diff.
+Points 1 and 3 stay plain text; the live checkout URL, if you have one, is the **green** block.
 
 This is a **disclosure about what shipped, not a request** — it asks for nothing, so it does not
 collide with `weegloo-platform-integration`'s ban on "give me these and I'll continue" wrap-ups.
@@ -265,8 +288,10 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
    결제위젯 pair (`…_gck_…` / `…_gsk_…`) from their own 개발자센터, and **recompute the precomputed
    `Basic …` value** (§4) from the new secret key.
 2. Delete every `test_gck_docs_…` / `test_gsk_docs_…` string left in the tree.
-3. The account-only work from §1 is now reachable — register the 가상계좌 deposit webhook (shape B),
-   or turn 가상계좌 off.
+3. The account-only work is now reachable. **If their keys offer 가상계좌** — a store's own test key
+   issued after the 전자결제 contract does; the documentation keys never did — build the 가상계좌
+   deposit receiver (shape B; it calls Toss's 결제 조회 API with the same new `Basic …` value) and
+   register it as the deposit webhook, or turn 가상계좌 off.
 4. Walk the **배포 체크리스트** listed in `llms.txt` (§1) before taking real payments.
 
 **A different provider** is a replacement, not a layer:
@@ -275,8 +300,9 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
    shapes*; if it pushes, `references/callback-receiver.md`). Do not assume it behaves like Toss.
 2. **Remove the Toss integration entirely**: the SDK script tag / package, the widget render and
    `requestPayment` code, Toss-specific `successUrl` / `failUrl` handling, the confirm Script's Toss
-   `Http` statement and its `Basic …` header, and **every `test_gck_…` / `test_gsk_…` string left in
-   the tree**. No dead Toss path, no orphan test key.
+   `Http` statement and its `Basic …` header — and the 가상계좌 deposit receiver Script, which holds
+   the same header, if one was built — and **every `test_gck_…` / `test_gsk_…` string left in the
+   tree**. No dead Toss path, no orphan test key.
 3. **Keep what is provider-neutral**: the order / receipt / entitlement ContentTypes, the `:self`
    ownership scoping, the amount-verification rule, the idempotency receipt.
 4. **Re-verify the invariants**: amount read from your own record, signature checked as the first
@@ -296,19 +322,20 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
 
 **Prefer A whenever the answer can be pulled.** It needs no signature verification, no inbound
 authentication, and no idempotency key — you are asking the authoritative source directly. §4 is A,
-and the Toss test-key default path is A, complete above in this file — unless the widget offers
-가상계좌 (§3), whose deposit webhook is B.
+and the Toss test-key default path is A, complete above in this file.
 
 **Add B when the money can move without your frontend being there** — a 가상계좌 deposit that lands
-hours later, a subscription renewal, a dispute. Card checkout stays A.
+hours later, a subscription renewal, a dispute. Card checkout stays A. **The Toss 가상계좌 deposit is
+B's trigger with A's truth:** its body carries no signature and no amount, so the receiver treats it
+as a trigger only and asks Toss's 결제 조회 API before it writes — the one receiver that calls out.
 
 > ### ➜ Building shape B? Read `references/callback-receiver.md` before designing the flow.
 > It is the only place with: which of `…/execute` and `…/execute/anonymous` the provider posts to and
 > what authenticates each, the signature check as the first statement, the shape→statement table for
 > mapping a provider's signature scheme, the replay window, and idempotency against provider
-> retries. On the Toss default you need it only for a **가상계좌 deposit notification** (§3), and only
-> once the user's own Toss account can register it — if you are not receiving a push from the
-> provider, do not open it.
+> retries. On the Toss documentation keys you never need it — they offer no 가상계좌; once their own
+> keys do, you need it for the **가상계좌 deposit notification** (§4). If you are not receiving a push
+> from the provider, do not open it.
 
 ---
 
@@ -323,27 +350,6 @@ hours later, a subscription renewal, a dispute. Card checkout stays A.
    with `isError: true` and do not fulfil.
 5. `ResourceCreate` / `ResourcePatch` the order → paid, and only then grant the entitlement.
 
-```jsonc
-{ "type": "ResourceFind", "name": "order", "resource": "Content",
-  "contentType": { "sys": { "id": "<orderCtId>" } },
-  "where": { "createdBy": ":self", "fields.orderId": "{ /payload/orderId }" } },
-
-{ "type": "Http", "name": "confirmed", "method": "POST",
-  "url": "https://api.pg.example/v1/payments/confirm",
-  "headers": [ { "key": "Authorization", "value": "Basic <key>", "secret": true } ],
-  "body": { "paymentKey": "{ /payload/paymentKey }", "orderId": "{ /payload/orderId }",
-            "amount": "{ /order/fields/amount/en-US }" },
-  "timeoutMs": 10000 },
-
-{ "type": "If",
-  "condition": { "and": [
-      { "===": [ "{ /confirmed/body/status }", "DONE" ] },
-      { "===": [ "{ /confirmed/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
-  "then": [ { "type": "ResourcePatch", "resource": "Content", "target": { "sys": { "id": "{ /order/sys/id }" } },
-              "locale": "en-US", "fields": { "status": "paid" } } ],
-  "else": [ { "type": "Return", "isError": true, "statusCode": 402, "value": "payment not confirmed" } ] }
-```
-
 - **Send or compare the amount you recorded, not the amount the caller sent.** A verify call that the
   provider itself amount-checks only protects you if the amount you sent came from your own record.
 - The PG round trip happens **inside the run**, while the frontend waits on `/execute` — keep the
@@ -356,14 +362,15 @@ hours later, a subscription renewal, a dispute. Card checkout stays A.
 
 | Secret | Goes in |
 |---|---|
-| PG **API/secret key** (for confirm calls) | `Http.headers` entry with **`"secret": true`** |
+| PG **API/secret key** (for confirm and inquiry calls) | `Http.headers` entry with **`"secret": true`** |
+| Toss's per-payment 가상계좌 `secret` (in the confirm response) | **nowhere** — the deposit receiver asks Toss instead (§4) |
 | **Webhook signing secret** (shape B) | `Signature.secret` / inside `Hash.value` — `references/callback-receiver.md` B-2 / B-3 |
 | Callback **auth token** (token path, shape B) | the `SpaceAccessToken` you register with the PG, not in the Script — `references/callback-receiver.md` B-1 |
 
-⚠️ **A `Signature.secret` written into a Script definition is stored as authored and is readable by
-anyone who can read that Script.** Keep Script `Read` off end-user roles, and treat the signing secret
-as compromised if it is not. (`Http.headers` `secret: true` is the encrypted-at-rest slot; there is no
-equivalent flag on `Signature` today.)
+⚠️ **`Http.headers` `secret: true` is the encrypted-at-rest slot; `Signature.secret` has no
+equivalent** — a signing secret written into a Script is stored as authored and readable by anyone
+who can read that Script, so keep Script `Read` off end-user roles, and treat the signing secret as
+compromised if an end-user role can already read it.
 
 ## Never
 
