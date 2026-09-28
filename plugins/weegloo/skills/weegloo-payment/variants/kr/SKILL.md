@@ -141,9 +141,9 @@ Model it before §3. **`ShortText` stops at 64 characters**, so the split is not
 `ResourceFind` keyed on it, such as an idempotency receipt) is the exception: queried ⇒ `LongText`.
 
 A `ShortText` here breaks nothing until Toss issues a `paymentKey` longer than 64 characters; then
-§4's `ResourcePatch` answers `/paymentKey/en-US: must not exceed a maximum length of
-64` **after** the confirm call has already approved the payment — the money moved, and the order still
-reads `pending`.
+§4's `ResourcePatch` fails on `/paymentKey/en-US: must not exceed a maximum length of 64` **after**
+the confirm call has already approved the payment — its `catch` answers `409` to every retry, the
+money moved, and the order still reads `pending`.
 
 ### The order Script — the amount is priced here, never on the page
 
@@ -250,7 +250,8 @@ await widgets.requestPayment({ orderId: order.orderId, orderName: order.orderNam
   static export, or configure the SPA fallback, before you call the flow done.
 - **The success page calls the confirm Script at once.** The payment must be approved within 10
   minutes of the request (§2); a success page that waits for a click, or a confirm that never runs,
-  lets that window lapse.
+  lets that window lapse. On a `409` or `503` (`"retry"`) it calls again, a few times with a growing
+  delay — safe, because every call settles from what Toss records (§4).
 
 ### 4. Server — the confirm Script
 
@@ -273,26 +274,45 @@ amount comparison, same write-back:
 { "type": "If", "condition": { "!==": [ "{ /current/fields/status/en-US }", "pending" ] },
   "then": [ { "type": "Return", "value": { "status": "{ /current/fields/status/en-US }" } } ] },
 
-{ "type": "Http", "name": "confirmed", "method": "POST",
-  "url": "https://api.tosspayments.com/v1/payments/confirm",
-  "headers": [
-    { "key": "Authorization",
-      "value": "Basic dGVzdF9nc2tfZG9jc19PYVB6OEw1S2RtUVhrelJ6M3k0N0JNdzY6", "secret": true },
-    { "key": "Content-Type", "value": "application/json" } ],
-  "body": { "paymentKey": "{ /payload/paymentKey }", "orderId": "{ /payload/orderId }",
-            "amount": "{ /order/fields/amount/en-US }" },
-  "timeoutMs": 10000 },
+// nothing reads the reply; a timeout, which can lose an approval, only asks the page to call again
+{ "type": "Try", "body": [
+    { "type": "Http", "method": "POST", "url": "https://api.tosspayments.com/v1/payments/confirm",
+      "headers": [
+        { "key": "Authorization",
+          "value": "Basic dGVzdF9nc2tfZG9jc19PYVB6OEw1S2RtUVhrelJ6M3k0N0JNdzY6", "secret": true },
+        { "key": "Content-Type", "value": "application/json" } ],
+      "body": { "paymentKey": "{ /payload/paymentKey }", "orderId": "{ /payload/orderId }",
+                "amount": "{ /order/fields/amount/en-US }" },
+      "timeoutMs": 10000, "ignoreStatusCode": true } ],
+  "catch": [ { "type": "Return", "isError": true, "statusCode": 503, "value": "retry" } ] },
+
+// 결제 조회 — what Toss recorded decides, on the first call and on every retry
+{ "type": "Try", "body": [
+    { "type": "Http", "name": "payment", "method": "GET",
+      "url": "https://api.tosspayments.com/v1/payments/{ /payload/paymentKey }",
+      "headers": [
+        { "key": "Authorization",
+          "value": "Basic dGVzdF9nc2tfZG9jc19PYVB6OEw1S2RtUVhrelJ6M3k0N0JNdzY6", "secret": true } ],
+      "timeoutMs": 5000, "ignoreStatusCode": true } ],
+  "catch": [ { "type": "Return", "isError": true, "statusCode": 503, "value": "retry" } ] },
+
+// IN_PROGRESS (authenticated, not yet approved) or a failed 결제 조회 is not an answer yet
+{ "type": "If", "condition": { "or": [
+      { "===": [ "{ /payment/body/status }", "IN_PROGRESS" ] },
+      { ">=": [ "{ /payment/status }", 500 ] } ] },
+  "then": [ { "type": "Return", "isError": true, "statusCode": 503, "value": "retry" } ] },
 
 { "type": "If",
   "condition": { "and": [
-      { "===": [ "{ /confirmed/body/status }", "DONE" ] },
-      { "===": [ "{ /confirmed/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
+      { "===": [ "{ /payment/body/status }", "DONE" ] },
+      { "===": [ "{ /payment/body/orderId }", "{ /order/fields/orderId/en-US }" ] },
+      { "===": [ "{ /payment/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
   "then": [ { "type": "Try",
               "body": [ { "type": "ResourcePatch", "resource": "Content",
                           "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
                           "version": "{ /current/sys/version }",
                           "fields": { "status": "paid",
-                                      "paymentKey": "{ /payload/paymentKey }" } } ],
+                                      "paymentKey": "{ /payment/body/paymentKey }" } } ],
               "catch": [ { "type": "Return", "isError": true, "statusCode": 409,
                            "value": "retry" } ] } ],
   "else": [ { "type": "Return", "isError": true, "statusCode": 402, "value": "payment not confirmed" } ] }
@@ -304,59 +324,63 @@ amount comparison, same write-back:
   authenticated; handle that like its other failure codes (below). Nothing is charged — approval,
   not authentication, is what debits.
 - **Precompute the `Basic` value.** A Script cannot base64-encode an arbitrary string, so encode
-  `secretKey + ":"` at authoring time and store the finished `Basic …` string with `"secret": true`.
-  The literal above is exactly `base64("test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6:")` — recompute it if
-  you use a different key.
-- **Store `paymentKey` and `orderId`** on the order; they are what later lookup and cancellation need.
+  `secretKey + ":"` at authoring time and store the finished `Basic …` string with `"secret": true`,
+  the same value in both `Http` statements: a refused 결제 조회 leaves an approved payment
+  `pending`. The literal above is exactly `base64("test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6:")` —
+  recompute it if you use a different key.
+- **Store `paymentKey`** — Toss's, from 결제 조회, not the payload's — beside the order's `orderId`;
+  they are what later lookup and cancellation need.
 - **Grant once.** A rerun — a reloaded success page, a retried call — must not pass the check a
-  second time, and nothing documented makes Toss stop it: its error table lists
-  `ALREADY_PROCESSED_PAYMENT` under 결제 승인 without saying when it is returned, and a confirm
-  repeated with the same `Idempotency-Key` (Toss's quick reference puts one on the confirm) gets
-  its first response back — `DONE` again. Hence the `ResourceRead` by id — the find reads the
-  indexed copy, which need not hold this Script's patch; `ResourceRead` never uses the index — and
-  the early `Return` for an order no longer `pending`, before the confirm is re-sent. If Toss
-  answers a concurrent second call `DONE` as well, the `version` lock sends it to the `catch`
-  (`409`; called again, it answers `status: "paid"`) instead of granting twice.
+  second time, and 결제 조회 answers `DONE` to every one of them. Hence the `ResourceRead` by id —
+  the find reads the indexed copy, which need not hold this Script's patch; `ResourceRead` never
+  uses the index — and the early `Return` for an order no longer `pending`, before the confirm is
+  re-sent. A concurrent second call that reaches the patch as well is sent to the `catch` by the
+  `version` lock (`409`; called again, it answers `status: "paid"`) instead of granting twice.
 - **That early `Return` skips the grant too**, so a grant that fails after the patch is never
-  retried. Put the grant after the `Try`, in a `Try` of its own whose `catch` patches `status` back
-  to `pending` and returns an error, so the next call passes the guard again. Keep the grant one
-  write, or key it on the order, so a rerun cannot duplicate part of it. Never revert in the
-  patch's `catch`: that call lost the race, and would undo the winner's `paid`.
-- **That next call must not re-send the confirm.** The payment is already approved, and no Toss
-  page says what a second confirm of it answers; Toss's quick reference has a failed confirm
-  checked with 결제 조회 before it is treated as failed, because it may already be approved. Such
-  an order is a `pending` one that already holds a `paymentKey` — only a patch that moves the
-  order off `pending` stores one. So before the confirm, add an `If` on
-  `{ /current/fields/paymentKey/en-US }` whose `then` asks 결제 조회 with the same `Basic …` header —
-  `GET https://api.tosspayments.com/v1/payments/{ /current/fields/paymentKey/en-US }` — patches
-  and grants as above only when it answers `DONE` with the order's `orderId` and amount, and ends
-  in a `Return`.
+  retried. Put the grant after the `paid` patch's `Try`, in a `Try` of its own whose `catch` patches
+  `status` back to `pending` and answers `503` (`"retry"`), so the page's next call passes the guard
+  again and settles from 결제 조회 like the first. Keep the grant one write, or key it on the order,
+  so a rerun cannot duplicate part of it. Never revert in the patch's `catch`: that call lost the
+  race, and would undo the winner's `paid`.
+- **결제 조회 decides, not the confirm's reply.** Toss can approve a confirm whose reply is then lost
+  — a timeout, a run that dies before the patch — leaving the order `pending`, and no Toss page says
+  what the next call's confirm of that approved payment answers. So nothing reads the reply (Toss's
+  quick reference, too, checks a failed confirm with 결제 조회 first). The `paymentKey` in the lookup
+  is the buyer's: keep both the `orderId` and the amount check, and a key from another payment, or a
+  junk one, answers `402` and writes nothing.
+- **`IN_PROGRESS` is not an answer yet.** Toss defines it as authenticated and not yet approved —
+  the state a confirm completes. Right after this Script's confirm it means Toss is still
+  processing one (a retry can arrive while a timed-out call's approval is in flight) or failed one
+  with a 5xx, so the `IN_PROGRESS` check answers `503`, as it does for a 결제 조회 that fails with
+  a 5xx, and the page calls again (§3). A `402` there would end those retries on a payment that
+  can still go through, or already has.
 - **A 가상계좌 confirm succeeds without paying.** The documentation keys never reach this branch
-  (they offer no 가상계좌), but build it anyway, so that §6 stays a key swap. It answers
+  (they offer no 가상계좌), but build it anyway, so that §6 stays a key swap. 결제 조회 answers
   `status: "WAITING_FOR_DEPOSIT"`, not `DONE` — the account was issued and nothing was deposited.
-  So replace the `else` above with one that takes this case first: after the same amount
-  comparison, patch `status: "awaiting_deposit"` **and `paymentKey`** (the deposit receiver asks
+  So replace the `else` above with one that takes this case first: after the same `orderId` and
+  amount checks, patch `status: "awaiting_deposit"` **and `paymentKey`** (the deposit receiver asks
   Toss about the payment by it — the notification carries none) under the same `version` lock,
   `Return` only what the buyer deposits into, and answer `402` otherwise:
 
   ```jsonc
   "else": [ { "type": "If",
       "condition": { "and": [
-          { "===": [ "{ /confirmed/body/status }", "WAITING_FOR_DEPOSIT" ] },
-          { "===": [ "{ /confirmed/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
+          { "===": [ "{ /payment/body/status }", "WAITING_FOR_DEPOSIT" ] },
+          { "===": [ "{ /payment/body/orderId }", "{ /order/fields/orderId/en-US }" ] },
+          { "===": [ "{ /payment/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
       "then": [
         { "type": "Try",
           "body": [ { "type": "ResourcePatch", "resource": "Content",
                       "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
                       "version": "{ /current/sys/version }",
                       "fields": { "status": "awaiting_deposit",
-                                  "paymentKey": "{ /payload/paymentKey }" } } ],
+                                  "paymentKey": "{ /payment/body/paymentKey }" } } ],
           "catch": [ { "type": "Return", "isError": true, "statusCode": 409,
                        "value": "retry" } ] },
         { "type": "Return", "value": {
-            "bankCode": "{ /confirmed/body/virtualAccount/bankCode }",
-            "accountNumber": "{ /confirmed/body/virtualAccount/accountNumber }",
-            "dueDate": "{ /confirmed/body/virtualAccount/dueDate }",
+            "bankCode": "{ /payment/body/virtualAccount/bankCode }",
+            "accountNumber": "{ /payment/body/virtualAccount/accountNumber }",
+            "dueDate": "{ /payment/body/virtualAccount/dueDate }",
             "amount": "{ /order/fields/amount/en-US }" } } ],
       "else": [ { "type": "Return", "isError": true, "statusCode": 402,
                   "value": "payment not confirmed" } ] } ]
@@ -367,13 +391,14 @@ amount comparison, same write-back:
   above) and never re-sends the confirm, so the account goes out once, from this `Return`; if a
   reload must show it again, store those three fields in this patch (`RichText`, like any Toss
   value) and return them from the guard — never the `secret`.
-- ⚠️ **Never store the confirm response's `secret`, and never `Return` `{ /confirmed/body }`, which
-  carries it.** Toss's docs verify the deposit notification against a stored copy of that value —
-  the one step of theirs not to follow here. Whoever holds it can post a `DONE` for an order nobody
-  paid, and no row keeps it from the buyer by default: they read their own order, and a row this
-  Script writes is theirs by `sys.createdBy` too (it runs as them), so a `createdBy :self` rule
-  without a `contentType` reaches it, silently. The receiver asks Toss's 결제 조회 API instead and
-  needs no copy (`references/callback-receiver.md` → *The Toss 가상계좌 deposit*).
+- ⚠️ **Never store the Payment object's `secret`, and never `Return` `{ /payment/body }`, which
+  carries it** — nor the confirm's reply, which carries it too. Toss's docs verify the deposit
+  notification against a stored copy of that value — the one step of theirs not to follow here.
+  Whoever holds it can post a `DONE` for an order nobody paid, and no row keeps it from the buyer by
+  default: they read their own order, and a row this Script writes is theirs by `sys.createdBy` too
+  (it runs as them), so a `createdBy :self` rule without a `contentType` reaches it, silently. The
+  receiver asks Toss's 결제 조회 API instead and needs no copy (`references/callback-receiver.md` →
+  *The Toss 가상계좌 deposit*).
 - **Guest checkout** has no caller to resolve `:self` against — drop the `createdBy` filter and match
   on `orderId` alone, which then has to be long and random rather than sequential. The order still
   comes from *The order Script*, which uses no `:self` — never from a token that can create orders.
@@ -381,8 +406,9 @@ amount comparison, same write-back:
   holds only `script.Execute`, pinned with `self` to the two Scripts — and no `Read` on orders:
   every guest shares that token's `:self`, so such a rule would show each guest every guest's order.
 - Toss's own failure codes (`NOT_FOUND_PAYMENT_SESSION`, `REJECT_CARD_COMPANY`, `UNAUTHORIZED_KEY`, …)
-  arrive as a `4XX` body — answer from `else` / `catch` and do not echo the provider message verbatim
-  to the buyer.
+  arrive in the confirm's `4XX` reply, which nothing reads: 결제 조회 decides instead — `402` from the
+  `else` once it shows a final state, `503` while it still reads `IN_PROGRESS`. A `402` on every
+  attempt points at the `Basic …` value. Never echo a Toss message to the buyer.
 
 ### 5. Tell the user — MANDATORY, not optional
 
@@ -419,7 +445,8 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
 
 1. Replace the client key in the browser and the secret key behind the confirm Script with the
    결제위젯 pair (`…_gck_…` / `…_gsk_…`) from their own 개발자센터, and **recompute the precomputed
-   `Basic …` value** (§4) from the new secret key.
+   `Basic …` value** (§4) from the new secret key, in both of the confirm Script's `Http`
+   statements.
 2. Delete every `test_gck_docs_…` / `test_gsk_docs_…` string left in the tree.
 3. The account-only work is now reachable. **If their keys offer 가상계좌** — a store's own test key
    issued after the 전자결제 contract does; the documentation keys never did — build the 가상계좌
@@ -432,10 +459,10 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
 1. **Read that provider's docs first** — shape, signature scheme, callback-header support (§*Two
    shapes*; if it pushes, `references/callback-receiver.md`). Do not assume it behaves like Toss.
 2. **Remove the Toss integration entirely**: the SDK script tag / package, the widget render and
-   `requestPayment` code, Toss-specific `successUrl` / `failUrl` handling, the confirm Script's Toss
-   `Http` statement and its `Basic …` header — and the 가상계좌 deposit receiver Script, which holds
-   the same header, if one was built — and **every `test_gck_…` / `test_gsk_…` string left in the
-   tree**. No dead Toss path, no orphan test key.
+   `requestPayment` code, Toss-specific `successUrl` / `failUrl` handling, the confirm Script's two
+   Toss `Http` statements and their `Basic …` header — and the 가상계좌 deposit receiver Script, which
+   holds the same header, if one was built — and **every `test_gck_…` / `test_gsk_…` string left in
+   the tree**. No dead Toss path, no orphan test key.
 3. **Keep what is provider-neutral**: the product / order / receipt / entitlement ContentTypes, the
    order Script and the buyer's read-only role on orders, the `:self` ownership scoping, the
    amount-verification rule, the idempotency receipt.
@@ -489,6 +516,10 @@ as a trigger only and asks Toss's 결제 조회 API before it writes — the one
    indexed copy, which need not hold the patch), skip it if it already reads paid, and patch with
    that read's `sys.version` as `version`, so a concurrent second call fails instead of granting
    twice. If the grant then fails, patch the order back to unpaid so the next call grants again.
+   Where the verify call is the approval itself, as Toss's confirm is, decide from the PG's lookup
+   API instead: an approval's reply can be lost after it succeeded, and a repeated approval need not
+   say whether the first went through. A lookup that still shows that approval in progress is a
+   retry, not a failure (§4).
 
 - **Send or compare the amount you recorded, not the amount the caller sent.** A verify call that the
   provider itself amount-checks only protects you if the amount you sent came from your own record,
@@ -504,7 +535,7 @@ as a trigger only and asks Toss's 결제 조회 API before it writes — the one
 | Secret | Goes in |
 |---|---|
 | PG **API/secret key** (for confirm and inquiry calls) | `Http.headers` entry with **`"secret": true`** |
-| Toss's per-payment 가상계좌 `secret` (in the confirm response) | **nowhere** — the deposit receiver asks Toss instead (§4) |
+| Toss's per-payment 가상계좌 `secret` (in the Payment object the confirm and 결제 조회 return) | **nowhere** — the deposit receiver asks Toss instead (§4) |
 | **Webhook signing secret** (shape B) | `Signature.secret` / inside `Hash.value` — `references/callback-receiver.md` B-2 / B-3 |
 | Callback **auth token** (token path, shape B) | the `SpaceAccessToken` you register with the PG, not in the Script — `references/callback-receiver.md` B-1 |
 

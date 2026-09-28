@@ -60,6 +60,7 @@ That table is the complete set. `settings` accepts these names only — anything
 
 > **Deleted as duplicate:** the token-type gate paragraph (which credentials are refused on every
 > `SETTING_*` row, and why adding a settings action never unblocks one) is owned by the
-> always-loaded rules `plugins/weegloo/rules/weegloo-global-rules.mdc:62` and
-> `plugins/weegloo/rules/weegloo-api-endpoints.mdc:48` — full model:
-> **`weegloo-space-access-token`**.
+> always-loaded rules `weegloo-global-rules` (*SpaceAccessToken (security — Space-scoped read/write
+> token; hard gate)*) and `weegloo-api-endpoints` (*SpaceRole & ServiceUserRole — permission
+> filters (`createdBy`, `:self`)*) — only a console login session or a Personal Access Token reaches
+> the axis. Full model: **`weegloo-space-access-token`**.

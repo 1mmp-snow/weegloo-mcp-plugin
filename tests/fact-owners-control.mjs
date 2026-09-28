@@ -45,10 +45,11 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * the defect disappears from under the control and every row reads INERT, which is the same silent
  * success this file exists to catch, one level up. That includes the integration branch — `develop`
  * looks immutable from here only until this work merges into it, so it is written as the sha it
- * resolves to today. The check below refuses anything that resolves to a branch tip.
+ * resolves to today. The check below refuses `HEAD` and every branch name. It compares names, not
+ * shas, so a sha that is some branch's current tip passes it: keep a pinned sha off every tip by hand.
  *
  * Pick the sha of a commit whose corpus still HOLDS the defect: `3809087` is develop's tip before
- * this branch, and `900812e` / `c6397c1` are commits on it from before the respective fix.
+ * this branch, and `8bd9c85` / `c6397c1` are commits on it from before the respective fix.
  */
 const DEFECT_AT = {
   'teardown-order': '8bd9c85',
@@ -59,15 +60,18 @@ const DEFECT_AT = {
   'read-fallback-is-opt-in': 'c6397c1',
   'media-file-url-shape': 'c6397c1',
   'script-writes-default-bucket': 'c6397c1',
-  // `da14b30` is this branch's tip before the `advanced` two-store rewrite: its corpus still
-  // scopes the exception to a row the same execution wrote.
-  'script-advanced-flag': 'da14b30',
+  // `0366a88` is from before the `advanced` two-store rewrite (`8a96493`): its corpus still scopes
+  // the exception to a row the same execution wrote. Not `da14b30`, which is a branch tip.
+  'script-advanced-flag': '0366a88',
   // `ff46d29` added the KR Toss variant, which stored the 가상계좌 `secret` on the buyer's own order
   // row; `e670b72` removed the stored copy.
   'toss-deposit-secret-never-stored': 'ff46d29',
   // `e670b72` still let the browser write the order row and its amount, which the confirm Scripts
   // then trusted; `935da28` moved the pricing and the order create into a Script.
   'payment-amount-priced-by-script': 'e670b72',
+  // `32c6442` is `d15d1c8`'s parent: its job recipe still gave the user `Edit` on their own job rows
+  // under `":self"` and called a completed job unforgeable; `d15d1c8` withdrew the grant.
+  'script-writes-attributed-to-executor': '32c6442',
 };
 
 const NOT_CORPUS = new Set(['FACT-OWNERS.md', 'GATE-INVENTORY.md']);

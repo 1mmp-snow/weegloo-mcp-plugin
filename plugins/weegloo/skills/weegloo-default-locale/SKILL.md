@@ -39,7 +39,7 @@ The create-time locale-presence check applies **only to `required` + `localized`
               "title": { "en-US": "Hello World" } } }
 ```
 
-**CDA note:** delivery reads **published** snapshots only; see **`weegloo-cda-publish`** skill and **`weegloo-api-endpoints`** rule (CDA publish section).
+**CDA note:** delivery reads **published** snapshots only; see **`weegloo-cda-publish`** skill and **`weegloo-api-endpoints`** rule (*CDA — published snapshot only (vs CMA drafts)*).
 
 ## `localized: false` on the ContentType (locale-agnostic fields)
 
@@ -48,7 +48,7 @@ Use this when the stored value **never differs by locale**-same logical value fo
 - **Meaning for Content writes:** the field is **not** a multi-locale map — its value belongs in the **default-locale** bucket only. A non-default key like `fields.myField["fr-FR"]` is **rejected on `PATCH`** (schema validation); on **create / PUT** it is not schema-checked, but keep to the default bucket regardless — a non-default key that slips in is **not delivered on a normal read** (it can only surface under an explicit `locale=fr-FR`/`locale=*` read), so never rely on it.
 - **Meaning for reads:** the value lives in the **default bucket only**. Under a non-default **`locale=X`** read it appears **only if X's `fallbackCode` chain reaches the default**; otherwise the field reads **empty** for X. It is **not** auto-mirrored into every locale.
 - **Contrast:** **`localized: true`** = per-locale copy (titles, bios); a **`required`** one must carry every **non-optional** locale (the default among them), a non-`required` one has **no** locale-presence requirement.
-- **CareerResume hindsight:** **`profileImage`** (and similar single global assets) would fit **`localized: false`** on the **resumeProfile** ContentType so editors are not pushed to duplicate the same Media refer across every locale bucket-see **`weegloo-create-content-type`** for where to set the flag in the schema.
+- **Example:** a **`profileImage`** (and similar single global assets) fits **`localized: false`** on a profile ContentType so editors are not pushed to duplicate the same Media refer across every locale bucket-see **`weegloo-create-content-type`** for where to set the flag in the schema.
 
 ## Delivery reads (CDA **and** ACDA) - `locale` URL parameter (read shape)
 
@@ -222,20 +222,14 @@ The canonical source for “this field has content” remains **default locale +
 
 ## Practical authoring (MCP / CMA)
 
-- Resolve **default locale** first (`cma_GetListLocales`, space settings, or your app’s `cmaResolveDefaultSpaceLocale`).
+- Resolve **default locale** first (`cma_GetListLocales` or space settings).
 - For every **`localized: true`** field you set, ensure **`fields.<id>.<defaultLocale>`** is non-empty when the field is required for your use case. For **`localized: false`**, only **`fields.<id>.<defaultLocale>`** exists for writes.
 - **Write only the locales you were actually given text for.** Do **not** machine-translate to fill the remaining buckets unless the user explicitly asked for a translation — an unwritten locale reads back **empty**, and the fix for that is the locale's `fallbackCode`, not invented copy.
 - When the user edits in **non-default** locale, many apps **copy the same value** into both **active** and **default** buckets on create so CMA always sees a default-locale value-mirror that pattern unless the product explicitly supports true multi-locale copy.
 
-## This repository (CareerResume)
-
-- **`lib/weegloo/cma-content-items.ts`** - `toLocalizedFieldsForCreate`: if active locale **is** the default, only the default bucket is sent; if not, the same scalar is written to **both** active and default buckets so the default is never left empty.
-- **`lib/weegloo/cma-update-content.ts`** - Media **Refer** updates use the **default** locale bucket (`resolveDefaultLocale` + merge) because Refer targets follow the same locale-bucket rules.
-- **`lib/weegloo/cda-client.ts`** - list/read calls pass a **`locale`** (from env / `getWeeglooLocale()`); a missing per-locale value resolves only through **that locale’s own `fallbackCode` chain** — with no `fallbackCode` it stays **empty**, and is *not* backfilled from the space default.
-
 ## Related
 
-- **Rule (concise invariants):** `weegloo-default-locale` (`.cursor/rules/weegloo-default-locale.mdc`).
+- **Rule (concise invariants):** `weegloo-default-locale` (*Critical invariants (always apply)*) — always loaded.
 - **ContentType field design (`localized`, types, validations):** `weegloo-create-content-type` skill.
 - **HTTP / Swagger:** `weegloo-api-endpoints` rule (locale in `fields.*` paths and query params).
 - **CDA shows published content only:** **`weegloo-cda-publish`** skill.

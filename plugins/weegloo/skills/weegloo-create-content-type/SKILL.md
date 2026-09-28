@@ -138,7 +138,7 @@ Choose **`localized: true`** only where the value is genuinely translated copy.
 
 > The **write and read semantics** of both settings (default-locale bucket rules, what `required` +
 > `localized` demands on Content create, `fallbackCode` behaviour) are already stated in the
-> always-loaded locale rule — `plugins/weegloo/rules/weegloo-default-locale.mdc:13-16` — and in full
+> always-loaded rule `weegloo-default-locale` (*Critical invariants (always apply)*) — and in full
 > in the **`weegloo-default-locale`** skill. Do not re-derive them here.
 
 ---

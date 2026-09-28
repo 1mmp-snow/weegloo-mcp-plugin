@@ -162,7 +162,9 @@ payment id**, not on arrival:
 
 1. `ResourceFind` a receipt Content by that id.
 2. If found ⇒ `Return` `200` immediately (a success, not an error — otherwise the PG keeps retrying).
-3. Otherwise write it, then do the work.
+3. Otherwise write it with `propagateEvents: true`, then do the work — a silent receipt may never
+   reach the synced copy step 1's find reads (`weegloo-script` → *Resource writes*), and every retry
+   would pass step 1 again.
 
 Before fulfilling, match the delivery to **your own order row** and check it exactly as in shape A —
 amount and status against what you stored, never the payload alone. A verified delivery proves *the

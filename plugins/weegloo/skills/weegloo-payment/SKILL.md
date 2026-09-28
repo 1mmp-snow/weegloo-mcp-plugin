@@ -497,6 +497,10 @@ redirect is the ordinary case B covers.
    indexed copy, which need not hold the patch), skip it if it already reads paid, and patch with
    that read's `sys.version` as `version`, so a concurrent second call fails instead of granting
    twice. If the grant then fails, patch the order back to unpaid so the next call grants again.
+   Where the verify call is the approval itself — a capture or approve call rather than a read —
+   decide from the PG's lookup API instead: an approval's reply can be lost after it succeeded, and
+   a repeated approval need not say whether the first went through. A lookup that still shows that
+   approval in progress is a retry, not a failure.
 
 - **Send or compare the amount you recorded, not the amount the caller sent** — and an order row the
   caller wrote *is* the amount the caller sent. A verify call that the provider itself amount-checks

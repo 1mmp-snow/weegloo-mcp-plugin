@@ -89,8 +89,8 @@ Otherwise, **`include`** may undo optimization by enlarging the body with nested
 ### Scoping the ContentType for a `fields.*` filter or `order`
 
 The flat `/contents` list needs **`sys.contentType.sys.id=<id>`** (not a bare `contentType=<id>`)
-before any `fields.*` filter or sort key, alongside the locale segment — both stated in the
-*Searching `fields.*`* section of `weegloo-global-rules` (`rules/weegloo-global-rules.mdc:106`).
+before any `fields.*` filter or sort key, alongside the locale segment — both stated in
+`weegloo-global-rules` (*Searching `fields.*` — Advanced Search is required*).
 **The delta that rule does not carry:** the requirement is a property of the **flat** path only. It
 does **not** apply to the nested **`/content-types/{contentTypeId}/contents`** path, nor to
 **ACMA/ACDA** (which expose only the nested form) — there the ContentType is already fixed by the URL.
@@ -147,9 +147,10 @@ Filter syntax (**`sys.id`**, **`sys.id[in]`**, delimiters) is defined per API in
 
 ## 5. Media list: filter by logical type (`mimeGroups`)
 
-Server-side category filter on CMA `GET .../spaces/{spaceId}/medias`, the `{locale}` segment, and the
-twelve allowed `MimeGroup` identifiers are all in `weegloo-api-endpoints`
-(`rules/weegloo-api-endpoints.mdc:109-112`) — always loaded, not repeated here.
+Filter to one asset category server-side on CMA `GET .../spaces/{spaceId}/medias` with
+**`fields.file.{locale}.mimeGroups={MimeGroup}`**, not by listing every Media. The `{locale}` segment
+and the twelve allowed `MimeGroup` identifiers are in `weegloo-api-endpoints`
+(*CMA Media list — filter by `mimeGroups` (logical asset type)*) — always loaded, not repeated here.
 
 ---
 
@@ -165,8 +166,8 @@ detail or image view straight from the list response." A **list/sidebar → open
 - **Detail: fetch that ONE Content by id, lazily, on click.** A by-id GET for the item the user
   actually opened is **correct and expected** — §3's "avoid N GETs" is about a *batch* up front.
 - **A `Refer → Media` is a stub, never a URL.** Resolve it (follow `sys.id`, or `?include=1` and read
-  `include.Media`) — see the *References are NEVER embedded* rule
-  (`rules/weegloo-global-rules.mdc:93`). Do this on the **detail** fetch, not from the list response.
+  `include.Media`) — see `weegloo-global-rules` (*Resource Search*, the *References are NEVER
+  embedded* item). Do this on the **detail** fetch, not from the list response.
 - **Thumbnails: append a preset style segment to the Media file URL** — `/style1`…`/style10` =
   32 / 64 / 128 / 192 / 256 / 320 / 480 / 640 / 960 / 1024 px **max dimension**, aspect preserved,
   WebP. No arbitrary width/height/quality params. Nothing is re-uploaded.
@@ -185,8 +186,8 @@ it the match is **exact equality**, so a substring query returns an **empty list
 error**; the header is also what keeps the query off an unindexed scan. Where to search (server-side
 over the whole dataset vs. in-memory over a fully-loaded array), the locale segment, the speed/index
 rationale, the MCP tools' inability to send the header, and RichText/Json being unsearchable are all
-in the *Searching `fields.*`* section of `weegloo-global-rules`
-(`rules/weegloo-global-rules.mdc:101-108`) — always loaded; deleted from here rather than restated.
+in `weegloo-global-rules` (*Searching `fields.*` — Advanced Search is required*) — always loaded;
+deleted from here rather than restated.
 
 **Deltas that rule does not carry:**
 

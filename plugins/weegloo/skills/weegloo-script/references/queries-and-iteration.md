@@ -106,13 +106,24 @@ simply not in that copy yet. "My `where` is on an indexed field" answers a quest
 and says nothing about **freshness**. Inside the lag window that search takes `advanced: false` too,
 exactly like a `fields.*` one.
 
+**And for a Script's own writes the lag is not the whole story.** They are silent by default
+(`propagateEvents: false`), and a silent write does not fire search indexing
+(`SKILL.md` → *Resource writes*), so the synced copy may never hold a row a Script created that
+way, however long ago. A search for such a row — a wallet, an idempotency receipt, a credential —
+takes `advanced: false` (cheap on a system-axis `where`), or its create takes
+`propagateEvents: true`, which indexes it about a second later and fires Webhooks too.
+
 **Even in that case, first try to restructure so it can stay `true`** — and usually you can:
 
 - Fetch it **by id** with **`ResourceRead`**. That statement never takes the indexed path at all, so
   it is both exact and unaffected by `advanced`. If you hold the `sys.id`, this is the answer.
 - Key the follow-up off the **`sys.id` the write returned** instead of searching for the row again.
   **Across Scripts too:** have A `Return` the id and B take it as payload (a Webhook `Transformation`
-  can pass the event's id the same way) — then B reads by id and the lag never applies.
+  can pass the event's id the same way) — then B reads by id and the lag never applies. An id in an
+  `/execute` payload is the caller's pick, though, and B acts on it with the author's authority: when
+  it decides whose row is read or charged, bind it with a `ResourceFind` on `advanced: false` whose
+  `where` is `{ "sys.id": "{ /payload/id }", "createdBy": ":self" }` — both system axes, and `null`
+  unless the row is the caller's.
 - For a read-then-write against a shared row, correctness comes from **`version` optimistic locking**
   (`patterns.md` → *Concurrency-safe writes*), not from the read path.
 

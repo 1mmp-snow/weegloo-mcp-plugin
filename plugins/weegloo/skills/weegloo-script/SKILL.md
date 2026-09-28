@@ -164,7 +164,10 @@ All reads take **`from`**: **`Current`** (live draft, what CMA/ACMA read; **defa
   `Try` can catch. It never searches — **if you hold the id, this is the read to use**.
 - **`ResourceFind`** — **first match or `null`**: `contentType` (**required** for Content), `where`
   (`fields.<name> → { op: value }`, `:self` supported), `order` (decides which match is "first"),
-  `from`, `advanced`. Branch on existence with `{ "==": [ "{ /name }", null ] }` (find-then-upsert).
+  `from`, `advanced`. Branch on existence with `{ "==": [ "{ /name }", null ] }` (find-then-upsert —
+  its `ResourceCreate` takes `propagateEvents: true`: a silent create may never reach the synced copy
+  the find reads, so a later run can miss the row and create it again; that also fires Webhooks, so
+  rule out a loop, `references/patterns.md` §5).
 - **`ResourceForEach`** (iterate every match via `onEach`; binds no result) and **`ResourceCount`**
   (how many match — binds a number, **`0` not `null`** when none, and `ContentType` is countable):
   **`references/queries-and-iteration.md`**, together with `advanced` / Advanced Search in full.
@@ -332,12 +335,12 @@ a Weegloo User / `DeliveryAccessToken` / `SpaceAccessToken`.
 it. One Script does the whole thing.
 
 1. **Author a Script** (`method: "Post"`) that: optionally validates/charges (`ResourceFind` the
-   caller's wallet by `where: { "createdBy": ":self" }`, `Return` if it is `null`, `ResourceRead` it
-   by that id, `If` balance check, a version-locked `ResourcePatch` to deduct — and put the `Http` in
-   a `Try` whose `catch` refunds); `Http` POSTs to the provider (key in a `secret` header);
-   `ParseJson` when the provider nests JSON inside a string; writes the result back with
-   `ResourceCreate`/`ResourcePatch` (a text field, or a **Media** ingest for images); `Return`s a
-   small summary.
+   caller's wallet by `where: { "createdBy": ":self" }` on **`advanced: false`**, `Return` if it is
+   `null`, `ResourceRead` it by that id, `If` balance check, a version-locked `ResourcePatch` to
+   deduct — and put the `Http` in a `Try` whose `catch` refunds); `Http` POSTs to the provider (key
+   in a `secret` header); `ParseJson` when the provider nests JSON inside a string; writes the result
+   back with `ResourceCreate`/`ResourcePatch` (a text field, or a **Media** ingest for images);
+   `Return`s a small summary.
    ⚠️ **The balance check holds only if the caller's role has no `Create`, `Edit` or `All` on the
    wallet ContentType** — with any of them the caller writes their own balance, and the check passes
    against a number they chose. A `createdBy :self` rule with no `contentType` (the usual member
@@ -345,13 +348,25 @@ it. One Script does the whole thing.
    by `sys.createdBy` even though a Script wrote it (*Secrets & auth* → *Attribution & `:self`*).
    Give the caller's role `Read` on the wallet at most, create it from a Script the caller runs (a
    wallet staff create is not theirs: the find misses it), and credit it only from staff or from a
-   Script that verified the payment (`weegloo-payment`) — never by an amount the caller sent.
+   Script that verified the payment (`weegloo-payment`) — never by an amount the caller sent. Debit
+   it by a cost the Script sets (a literal, or a price on a row the caller cannot write), never by a
+   `{ /payload/… }` value: a caller who sends `0` or a negative cost calls the provider free or
+   mints credit.
+   ⚠️ **Every find of the wallet takes `advanced: false`** — the crediting Script's too, where a miss
+   drops a verified payment's credit or makes a second wallet. The wallet's create is a Script write,
+   silent by default (*Resource writes*), and a default find reads the synced copy, which a silent
+   write may never reach and any write reaches only about a second later (*Resource reads*): it can
+   answer `null` for a wallet that exists. On a `createdBy` `where` the `false` path is cheap. Do not
+   swap the find for a `ResourceRead` of an id the caller sends: the Script runs with the author's
+   authority, so it would charge whichever wallet the caller names.
    ⚠️ **Lock the deduction to the wallet's `sys.version`** — unlocked, two concurrent runs both pass
    the balance check and both write the same reduced balance: two provider calls paid for once. Take
    the balance and version from the **`ResourceRead`**, not from the `ResourceFind` that located the
-   wallet — a find reads the synced copy, which trails the writes (*Resource reads*) and need not hold
-   the last deduction, so a version taken from it can refuse a run that raced nothing. The deduct
-   `ResourcePatch` carries `"version": "{ /wallet/sys/version }"` (`wallet` = that read) in a `Try` of
+   wallet — `ResourceRead` never takes the indexed path (*Resource reads*), so its version is the
+   last deduction's whatever the find's `advanced` says; a find left on the default path reads the
+   synced copy, which trails the writes, and a version taken from it can refuse a run that raced
+   nothing. The deduct `ResourcePatch` carries `"version": "{ /wallet/sys/version }"` (`wallet` =
+   that read) in a `Try` of
    its own, whose `catch` `Return`s `409` with `"retry": true` — never the refund's `catch`: a refused
    deduction took nothing, and refunding it pays the caller for racing. The deduction runs before the
    `Http`, so a refused run calls no provider. The refund is a second write, and the deduction spent

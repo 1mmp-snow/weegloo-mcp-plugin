@@ -192,7 +192,10 @@ A scheduled run passes **no payload, no raw body, and no headers**. Inside the S
 
 So a scheduled Script **finds its own work**: "every Content of type `job` whose `status` is
 `pending`", "everything whose `expiresAt` is before `{ /now/iso }`". Write that `ResourceFind` first and
-branch on an empty result.
+branch on an empty result. The write that takes a row out of that set — the patch off `pending`, the
+delete of an expired row — takes `propagateEvents: true`, and so does a create a later run must find:
+a Script's writes are silent by default and may never reach the synced copy a default find reads, so
+every run would find the same row again (`weegloo-script` → *Resource writes*).
 
 **Timeout.** A scheduled run is bounded by the same run budget as any other execution — sized by the
 `timeoutMs` values the Script declares on `Http` / `EmailSend`, up to the platform cap
@@ -250,6 +253,7 @@ cannot read run history over MCP — application code reads it over REST.
         "then": [
           { "type": "ResourceCreate", "resource": "Content",
             "contentType": { "sys": { "id": "ct_rate" } },
+            "propagateEvents": true,        // indexed, so the next run's find sees this row
             "fields": { "code":     { "en-US": "USD" },
                         "value":    { "en-US": "{ /rates/body/USD }" },
                         "syncedAt": { "en-US": "{ /now/iso }" } } } ],
