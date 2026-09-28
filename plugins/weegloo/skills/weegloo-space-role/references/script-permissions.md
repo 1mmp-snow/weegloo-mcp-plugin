@@ -96,9 +96,19 @@ When a **ContentType** carries async **request** + **response** for an external 
 | Action | `createdBy` filter |
 |--------|-------------------|
 | **`Create`** | **Omit** — allow new job rows for the job **ContentType** |
-| **`Read`**, **`Edit`**, **`Delete`**, … | **`":self"`** + job **ContentType** `Refer` |
+| **`Read`**, **`Delete`** | **`":self"`** + job **ContentType** `Refer` |
+| **`Edit`**, **`All`** | **Not granted** — the Script writes the result |
 
-End users submit jobs (**Create**); they may only **read / change / delete their own** job Content.
-A **Script** (running with its author's delegated authority) writes **`response`** platform-side
-after the external API succeeds — the user's own role never needs `Edit` on the `response` field, so
-they cannot forge a completed job.
+End users submit jobs (**Create**), poll their own by `sys.id` (**Read**) and may delete them; they
+never edit one. A **Script** (running with its author's delegated authority) writes **`response`**
+platform-side after the external API succeeds, so the user's role needs no `Edit` — and without it
+they cannot rewrite `response` once the Script has written it. A `createdBy :self` `Edit` or `All`
+rule with no `contentType` (the usual member default) reaches every job row the user created and
+hands that `Edit` back: give each such rule a `contentType`, and none of them the job type.
+
+**That is the whole guarantee — there is no field-level permission.** `Create` writes every field, so
+a user can submit a row with `response` (or a status) already filled in. The Script overwrites both
+on every path, its `catch` included, and nothing that must be proof — a charge, a credit, anything
+another member or Script relies on — trusts a job row's `response`: that goes in a row the Script
+creates on a type the user's role holds no `Create`, `Edit` or `All` on. For a Webhook-run Script,
+`runAs: EventUser` makes that row the user's, so their `:self` `Read` finds it.

@@ -224,7 +224,7 @@ Wire **`ServiceLogin.sys.defaultRole`** (or **`ServiceUser.roleOverride`**) to t
 - **`weegloo-delivery-access-token`** — bind a least-privilege **SpaceRole** to a CDA token.
 - **`weegloo-service-login`** — ServiceUserRole, `defaultRole`, `roleOverride`, ACMA member scope.
 - **`weegloo-service-architecture`** — which role type each service pattern needs.
-- **`weegloo-script`** — Script `Execute` permission, the author unconditional-Allow gate, and async external-API jobs (Create vs `:self` Read/Edit/Delete split).
+- **`weegloo-script`** — Script `Execute` permission, the author unconditional-Allow gate, and async external-API jobs (Create vs `:self` Read/Delete split, no `Edit`).
 - **`weegloo-webhook`** — Webhook triggers that run a Script or POST to a URL.
 - **`weegloo-scheduler`** — `SETTING_SCHEDULER` + the `script.Execute` grant a Scheduler owner must keep.
 - **`weegloo-api-endpoints`** — API base URLs, docs index, `SpaceRole` reference link, and the CMA OpenAPI field shapes for **`CreateSpaceRole`** / **`CreateServiceUserRole`**.

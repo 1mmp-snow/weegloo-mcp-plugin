@@ -9,7 +9,7 @@ it does today**. That is a claim about behavior, so bytes cannot verify it: a by
 satisfied identically by "we deleted a duplicate" and by "we deleted a gate".
 
 This runner puts a real prompt in front of a real agent and asserts on what the agent
-**decides**. 23 fixtures / 69 asserts today, 17 Korean and 6 English — the corpus is written
+**decides**. 26 fixtures / 80 asserts today, 20 Korean and 6 English — the corpus is written
 in the languages users actually write in, because a routing trigger that only fires in
 English is a gate that does not fire.
 
@@ -48,7 +48,9 @@ never knows to go look up:
 Advanced-Search header (an empty array, reported to the user as "no results") · the CDA
 flattened-vs-bucket read shape (`undefined`) · a browser token bound to Administrator ·
 publish-after-create (a blank site) · the default-locale bucket on create · Media readiness
-before a `Refer` (an image that never loads) · UTC cron · and the anti-question policies
+before a `Refer` (an image that never loads) · UTC cron · a payment amount the buyer wrote (a
+server-side check that compares their number with itself) · a post-payment grant with no
+already-paid guard (points credited again on every replayed confirm) · and the anti-question policies
 (Maps key, PG choice, SMTP vendor, Kakao postcode key) whose failure mode is a stall.
 
 One fixture — `05-scheduler-version-header` — encodes a **live drift** found during the

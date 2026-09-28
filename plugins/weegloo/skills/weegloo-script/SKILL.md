@@ -337,6 +337,14 @@ it. One Script does the whole thing.
    `secret` header); `ParseJson` when the provider nests JSON inside a string; writes the result back
    with `ResourceCreate`/`ResourcePatch` (a text field, or a **Media** ingest for images); `Return`s a
    small summary.
+   ⚠️ **The balance check holds only if the caller's role has no `Create`, `Edit` or `All` on the
+   wallet ContentType** — with any of them the caller writes their own balance, and the check passes
+   against a number they chose. A `createdBy :self` rule with no `contentType` (the usual member
+   default) reaches the wallet too: the Script finds it by `createdBy :self`, so it is the caller's
+   by `sys.createdBy` even though a Script wrote it (*Secrets & auth* → *Attribution & `:self`*).
+   Give the caller's role `Read` on the wallet at most, create it from a Script the caller runs (a
+   wallet staff create is not theirs: the find misses it), and credit it only from staff or from a
+   Script that verified the payment (`weegloo-payment`) — never by an amount the caller sent.
 2. **Grant `script.Execute`** to the caller's role (above).
 3. **Frontend**: `POST …/scripts/{id}/execute` with the payload and read the result off the response.
    **When the provider is too slow for one run**, keep the wait off the request: the frontend creates

@@ -62,6 +62,12 @@ const DEFECT_AT = {
   // `da14b30` is this branch's tip before the `advanced` two-store rewrite: its corpus still
   // scopes the exception to a row the same execution wrote.
   'script-advanced-flag': 'da14b30',
+  // `ff46d29` added the KR Toss variant, which stored the 가상계좌 `secret` on the buyer's own order
+  // row; `e670b72` removed the stored copy.
+  'toss-deposit-secret-never-stored': 'ff46d29',
+  // `e670b72` still let the browser write the order row and its amount, which the confirm Scripts
+  // then trusted; `935da28` moved the pricing and the order create into a Script.
+  'payment-amount-priced-by-script': 'e670b72',
 };
 
 const NOT_CORPUS = new Set(['FACT-OWNERS.md', 'GATE-INVENTORY.md']);
