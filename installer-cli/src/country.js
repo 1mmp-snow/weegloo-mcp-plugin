@@ -28,21 +28,23 @@
  * cannot know the country must never make an install worse than no filter at all.
  *
  * Country VARIANTS — one skill name, a different body per country (a skill is linked by ONE name
- * from the router, so two directories cannot share it). A skill directory may hold, besides or
- * instead of its top-level `SKILL.md`, complete alternative versions in `variants/<name>/`, each
- * with its own `SKILL.md` (`name:` = the skill's id, `country:` = the countries it serves):
+ * from the router, so two directories cannot share it). Besides its top-level `SKILL.md` — the
+ * DEFAULT, always present — a skill directory may hold complete alternative versions in
+ * `variants/<name>/`, each with its own `SKILL.md` (`name:` = the skill's id) and a REQUIRED
+ * `country:` tag. The folder name is a label for people and is never read:
  *
- *   1. top-level SKILL.md, no tag           → every country
- *   2. top-level SKILL.md, `country: -KR`   → every country but KR
- *   3. only variants/<a>/ (`country: KR, US`) → KR and US get <a>; everyone else gets nothing
- *   4. top-level + variants/a (KR) + variants/b (US) → KR gets a, US gets b, the rest the top level
+ *   variants/kr/     country: KR        variants/us/     country: US
+ *   variants/de_fr/  country: DE, FR    variants/-jp-cn/ country: -JP, -CN
  *
- * The rule: a variant naming the country wins; otherwise the top-level `SKILL.md` (if its tag lets
- * the country in); otherwise the skill is not installed. A variant REPLACES the whole skill — only
- * its own folder is installed, never mixed with the top level. An include list therefore belongs
- * to a variant, never to the top-level `SKILL.md` (the builder refuses it). With the country
- * unknown no variant is chosen: the top level installs (fail-open) and a skill with no top level
- * does not install at all.
+ * The rule for a known country, first match wins:
+ *   1. the variant whose include list names the country (at most one can — they are disjoint);
+ *   2. otherwise the one excluding variant, if the country is not on its list;
+ *   3. otherwise the top-level default, if its own tag lets the country in (none, or `-XX`);
+ *   4. otherwise the skill is not installed.
+ * Above: KR→kr, US→us, DE/FR→de_fr, JP/CN→default, BR→-jp-cn. With the country UNKNOWN no variant is
+ * chosen and the default installs (fail-open). A variant REPLACES the whole skill — only its own
+ * folder is installed, never mixed with the top level. An include list therefore belongs to a
+ * variant, never to the top-level `SKILL.md` (the builder refuses it).
  *
  * The builder ships variants in a top-level `variants` map (`{ "<skill-id>": [ { name, country,
  * files } ] }`) rather than inside `skills`, so a CLI that predates variants still reads a valid
@@ -247,11 +249,12 @@ export function normalizeCountrySpec(spec) {
 /**
  * Validates a manifest's optional `variants` map (the builder's output). Returns a fresh normalized
  * map, or null when anything is off — the caller rejects the whole manifest, like every other shape
- * error. Each variant must carry an INCLUDE list (the countries it serves), and no two variants of
- * one skill may claim the same country: a country gets exactly one version.
+ * error. The same invariants the builder enforces, so that a country always resolves to ONE
+ * version: every variant carries a country list; include lists are pairwise disjoint; at most one
+ * variant excludes (two excluding variants would both take any country on neither list).
  *
  * @param {unknown} raw
- * @returns {Record<string, Array<{ name: string, country: { include: string[] }, files: Record<string,string> }>> | null}
+ * @returns {Record<string, Array<{ name: string, country: { include: string[] } | { exclude: string[] }, files: Record<string,string> }>> | null}
  */
 export function normalizeCountryVariants(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -260,14 +263,16 @@ export function normalizeCountryVariants(raw) {
     if (!SAFE_ID.test(id) || !Array.isArray(list) || list.length === 0) return null;
     const names = new Set();
     const claimed = new Set();
+    let excluding = 0;
     const variants = [];
     for (const v of list) {
       if (!v || typeof v !== 'object' || typeof v.name !== 'string' || !SAFE_ID.test(v.name)) return null;
       if (names.has(v.name)) return null;
       names.add(v.name);
       const country = normalizeCountrySpec(v.country);
-      if (!country?.include) return null;
-      for (const c of country.include) {
+      if (!country) return null;
+      if (country.exclude && ++excluding > 1) return null;
+      for (const c of country.include ?? []) {
         if (claimed.has(c)) return null;
         claimed.add(c);
       }
@@ -293,6 +298,23 @@ export function countryAllows(spec, country) {
   if (spec.include) return spec.include.includes(country);
   if (spec.exclude) return !spec.exclude.includes(country);
   return true;
+}
+
+/**
+ * The variant `country` gets, or undefined (then the top-level default decides). A variant naming
+ * the country beats the excluding variant — "KR" is more specific than "everywhere but JP, CN" —
+ * and with the country unknown no variant is chosen at all. Matching reads each variant's
+ * `country` spec only: the folder name is a label and is never consulted.
+ *
+ * @param {Array<{ name: string, country: { include?: string[], exclude?: string[] } }>} variants
+ * @param {string|null} country
+ */
+export function pickCountryVariant(variants, country) {
+  if (!country || !variants?.length) return undefined;
+  return (
+    variants.find((v) => v.country.include?.includes(country)) ??
+    variants.find((v) => v.country.exclude && !v.country.exclude.includes(country))
+  );
 }
 
 /**
@@ -323,14 +345,15 @@ export function filterResourcesByCountry(resources, country, { exemptRuleIds = [
     : [...byId.keys()];
   const skills = [];
   for (const id of ids) {
-    const pick = country ? (variants?.[id] ?? []).find((v) => v.country.include.includes(country)) : undefined;
+    const pick = pickCountryVariant(variants?.[id], country);
     if (pick) {
       skills.push({ id, files: pick.files });
       variantSkills.push({ id, variant: pick.name });
       continue;
     }
     const top = byId.get(id);
-    // No top level = a variants-only skill: installed only where a variant names the country.
+    // The builder requires a top-level default beside variants; a manifest without one (built
+    // before that rule) resolves as "installed only where a variant matches".
     if (top && countryAllows(top.country, country)) skills.push(top);
     else excludedSkills.push(id);
   }
@@ -371,9 +394,67 @@ export async function resolveCountry({ pinned = null, recorded = null, detect })
 
 /** `{include:['KR','US']}` → `KR, US`, `{exclude:['KR']}` → `-KR`, none → `*` — the author notation. */
 export function describeCountrySpec(spec) {
-  if (spec?.include) return spec.include.join(', ');
+  if (spec?.include) return spec.include.length > 0 ? spec.include.join(', ') : '(nowhere)';
   if (spec?.exclude) return spec.exclude.map((c) => `-${c}`).join(', ');
   return '*';
+}
+
+// ── country sets, for the author report ─────────────────────────────────────────────────
+// `{ neg: false, codes }` = exactly these countries; `{ neg: true, codes }` = every country but
+// these. Include lists are finite and exclude lists co-finite, so these two forms are closed under
+// the union / difference the resolution rule needs.
+
+const setOfSpec = (spec) =>
+  !spec ? { neg: true, codes: new Set() } : spec.include ? { neg: false, codes: new Set(spec.include) } : { neg: true, codes: new Set(spec.exclude) };
+const setHas = (s, c) => s.neg !== s.codes.has(c);
+const setUnion = (a, b) => {
+  if (!a.neg && !b.neg) return { neg: false, codes: new Set([...a.codes, ...b.codes]) };
+  if (a.neg && b.neg) return { neg: true, codes: new Set([...a.codes].filter((c) => b.codes.has(c))) };
+  const [fin, cof] = a.neg ? [b, a] : [a, b];
+  return { neg: true, codes: new Set([...cof.codes].filter((c) => !fin.codes.has(c))) };
+};
+/** a minus b. */
+const setMinus = (a, b) => {
+  if (!a.neg) return { neg: false, codes: new Set([...a.codes].filter((c) => !setHas(b, c))) };
+  if (!b.neg) return { neg: true, codes: new Set([...a.codes, ...b.codes]) };
+  return { neg: false, codes: new Set([...b.codes].filter((c) => !a.codes.has(c))) };
+};
+/** Back to a spec: null = every country; `{ include: [] }` = nowhere. */
+const specOfSet = (s) => {
+  const codes = [...s.codes].sort(byteCompare);
+  if (s.neg) return codes.length > 0 ? { exclude: codes } : null;
+  return { include: codes };
+};
+
+/**
+ * Where each version of a skill wins under the resolution rule (file header), and where the skill
+ * exists at all — for known countries (with the country unknown the default installs). Each
+ * `versions[i]` is `{ name, set, spec }`: `name` is the variant name or null for the top-level
+ * default, `spec` its reach as a country spec (null = every country, `{ include: [] }` = nowhere).
+ */
+export function skillReach(top, variants = []) {
+  const { versions, presence } = skillReachSets(top, variants);
+  return {
+    versions: versions.map((v) => ({ ...v, spec: specOfSet(v.set) })),
+    presence,
+    presenceSpec: specOfSet(presence),
+  };
+}
+
+function skillReachSets(top, variants = []) {
+  const empty = { neg: false, codes: new Set() };
+  const named = variants.filter((v) => v.country.include).reduce((s, v) => setUnion(s, setOfSpec(v.country)), empty);
+  const excluding = variants.find((v) => v.country.exclude);
+  const versions = variants.map((v) => ({
+    name: v.name,
+    set: v.country.include ? setOfSpec(v.country) : setMinus(setOfSpec(v.country), named),
+  }));
+  if (top) {
+    let rest = setMinus(setOfSpec(top.country ?? null), named);
+    if (excluding) rest = setMinus(rest, setOfSpec(excluding.country));
+    versions.unshift({ name: null, set: rest });
+  }
+  return { versions, presence: versions.reduce((s, v) => setUnion(s, v.set), empty) };
 }
 
 /**
@@ -401,36 +482,32 @@ export function countrySubset(a, b) {
  * (`weegloo-default-locale`); a mention then counts against both, which over-reports but never
  * misses.
  *
- * Variants: a skill is PRESENT wherever its top level or any variant installs, and each variant's
- * text is its own referrer, installed only in the countries it names.
+ * Variants: each version of a skill (the default, every variant) is its own referrer, installed
+ * only where it WINS under the resolution rule (a variant's text in the countries it takes, the
+ * default in what is left), and a skill is PRESENT wherever any of its versions wins. Only known
+ * countries are judged: with the country unknown every default installs.
  *
- * @param {{ skills: Array<{id:string, country?:object, files:Record<string,string>}>, rules: Array<{id:string, country?:object, content:string}>, variants?: Record<string, Array<{name:string, country:{include:string[]}, files:Record<string,string>}>> }} manifest
+ * @param {{ skills: Array<{id:string, country?:object, files:Record<string,string>}>, rules: Array<{id:string, country?:object, content:string}>, variants?: Record<string, Array<{name:string, country:object, files:Record<string,string>}>> }} manifest
  * @returns {Array<{ from: string, to: string, fromCountry: string, toCountry: string }>}
  */
 export function findCountryReferenceGaps(manifest) {
   const variants = manifest.variants ?? {};
   const topById = new Map(manifest.skills.map((s) => [s.id, s]));
   const skillIds = [...new Set([...topById.keys(), ...Object.keys(variants)])].sort(byteCompare);
-
-  // Where a skill exists at all: its top level's reach plus every variant's countries.
-  const presence = (id) => {
-    const top = topById.get(id);
-    const codes = (variants[id] ?? []).flatMap((v) => v.country.include);
-    if (!top) return { include: [...new Set(codes)].sort(byteCompare) };
-    if (!top.country) return null;
-    if (top.country.exclude) {
-      const left = top.country.exclude.filter((c) => !codes.includes(c));
-      return left.length > 0 ? { exclude: left } : null;
-    }
-    return { include: [...new Set([...top.country.include, ...codes])].sort(byteCompare) };
-  };
+  const reach = new Map(skillIds.map((id) => [id, skillReach(topById.get(id), variants[id])]));
 
   const referrers = [];
   for (const id of skillIds) {
     const top = topById.get(id);
-    if (top) referrers.push({ key: `skill ${id}`, kind: 'skill', id, country: top.country ?? null, text: Object.values(top.files).join('\n') });
-    for (const v of variants[id] ?? []) {
-      referrers.push({ key: `skill ${id} (variant ${v.name})`, kind: 'skill', id, country: v.country, text: Object.values(v.files).join('\n') });
+    for (const r of reach.get(id).versions) {
+      const files = r.name === null ? top.files : variants[id].find((v) => v.name === r.name).files;
+      referrers.push({
+        key: r.name === null ? `skill ${id}` : `skill ${id} (variant ${r.name})`,
+        kind: 'skill',
+        id,
+        country: specOfSet(r.set),
+        text: Object.values(files).join('\n'),
+      });
     }
   }
   for (const r of manifest.rules) {
@@ -438,7 +515,7 @@ export function findCountryReferenceGaps(manifest) {
   }
 
   const targets = [
-    ...skillIds.map((id) => ({ key: `skill ${id}`, kind: 'skill', id, country: presence(id) })),
+    ...skillIds.map((id) => ({ key: `skill ${id}`, kind: 'skill', id, country: specOfSet(reach.get(id).presence) })),
     ...manifest.rules.map((r) => ({ key: `rule ${r.id}`, kind: 'rule', id: r.id, country: r.country ?? null })),
   ];
   const gaps = [];

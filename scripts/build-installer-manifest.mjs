@@ -28,7 +28,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SAFE_ID, SAFE_REL_PATH } from '../installer-cli/src/io.js';
 // Same reasoning for the country tag: the grammar the builder accepts and the spec shape the
 // installer validates come from one module, so the two cannot disagree about what a tag means.
-import { extractCountryTag, findCountryReferenceGaps, describeCountrySpec } from '../installer-cli/src/country.js';
+import { extractCountryTag, findCountryReferenceGaps, describeCountrySpec, skillReach } from '../installer-cli/src/country.js';
 import { CORE_RULE_IDS } from '../installer-cli/src/self-update.js';
 
 const SCHEMA_VERSION = 1;
@@ -143,12 +143,15 @@ function frontmatterName(text) {
  * Every skill directory, as its top-level entry (in `skills`) and its country variants (in the
  * returned `variants` map). Layout and resolution rule: installer-cli/src/country.js header.
  *
- * - top-level `SKILL.md` = the default version; its tag may only EXCLUDE (`-KR`) — an include list
- *   is a variant's job, and on the default it would silently mean "not installed elsewhere";
+ * - top-level `SKILL.md` = the DEFAULT, required for every skill (with or without variants): it is
+ *   what installs when no variant takes the country, when the country is unknown, and on the plugin
+ *   marketplaces / CLIs that do not know variants. Its tag may only EXCLUDE (`-KR`) — an include
+ *   list is a variant's job;
  * - `variants/<name>/` = a complete alternative version: its own `SKILL.md` with `name:` equal to
- *   the skill id and a required include tag, plus its own files — it replaces the whole skill;
- * - no top-level `SKILL.md` = a variants-only skill; then nothing else may sit at the top level,
- *   because a variant installs only its own folder and those files would never reach a disk.
+ *   the skill id and a REQUIRED tag, plus its own files — it replaces the whole skill. `<name>` is
+ *   a label and is never read: the tag decides. Include lists must be disjoint (a country is named
+ *   by one variant at most) and at most one variant may exclude, so a country always resolves to
+ *   exactly one version.
  */
 function buildSkills(skillsDir) {
   const skills = [];
@@ -198,7 +201,8 @@ function buildSkills(skillsDir) {
     }
 
     const list = [];
-    const claimed = new Map(); // country → variant name
+    const claimed = new Map(); // country → the variant whose include list names it
+    let excluding = null; // the one variant with an exclusion list
     for (const [name, entries] of [...variantFiles].sort(([a], [b]) => byteCompare(a, b))) {
       const vlabel = `${label} variant '${name}'`;
       const vfiles = {};
@@ -218,15 +222,24 @@ function buildSkills(skillsDir) {
         vfiles[rel] = tag.text;
       }
       if (!('SKILL.md' in vfiles)) throw new Error(`${vlabel} has no SKILL.md`);
-      if (!vcountry?.include) {
+      if (!vcountry) {
         throw new Error(
-          `${vlabel}: SKILL.md needs the countries it serves, e.g. country: KR — ` +
-            'a variant replaces the skill only where it names the country (an exclusion or "every country" is not a variant)'
+          `${vlabel}: SKILL.md needs a country tag, e.g. country: KR or country: -JP, -CN — ` +
+            'a variant with no tag (every country) would always win; that version is the top-level default'
         );
       }
-      for (const c of vcountry.include) {
+      if (vcountry.exclude) {
+        if (excluding) {
+          throw new Error(
+            `${label}: variants '${excluding}' and '${name}' both exclude — at most one variant may, ` +
+              'or a country on neither list would get two versions'
+          );
+        }
+        excluding = name;
+      }
+      for (const c of vcountry.include ?? []) {
         if (claimed.has(c)) {
-          throw new Error(`${label}: variants '${claimed.get(c)}' and '${name}' both serve ${c} — a country gets exactly one version`);
+          throw new Error(`${label}: variants '${claimed.get(c)}' and '${name}' both name ${c} — a country gets exactly one version`);
         }
         claimed.set(c, name);
       }
@@ -239,15 +252,12 @@ function buildSkills(skillsDir) {
       throw new Error(`skill '${id}' has no files — installer would reject this manifest`);
     }
     if (!('SKILL.md' in files)) {
-      if (list.length === 0) {
-        throw new Error(`skill '${id}' has no SKILL.md — add one at the top, or put each version in variants/<name>/SKILL.md`);
-      }
-      const orphans = Object.keys(files);
-      if (orphans.length > 0) {
-        throw new Error(
-          `${label}: ${orphans.join(', ')} would never be installed — without a top-level SKILL.md only variants/ may exist (a variant installs only its own folder)`
-        );
-      }
+      throw new Error(
+        list.length === 0
+          ? `skill '${id}' has no SKILL.md`
+          : `${label} has variants but no top-level SKILL.md — every skill needs its default version there ` +
+              '(installed when no variant takes the country, when the country is unknown, and wherever variants are not read)'
+      );
     } else {
       skills.push(entry(id, country, { files }));
     }
@@ -378,17 +388,23 @@ export function serializeManifest(manifest) {
  */
 export function countryReport(manifest) {
   const variants = manifest.variants ?? {};
-  const topIds = new Set(manifest.skills.map((s) => s.id));
-  // Restricted = not installed somewhere: an excluding top level, or no top level at all.
-  const restrictedSkills =
-    manifest.skills.filter((s) => s.country).length + Object.keys(variants).filter((id) => !topIds.has(id)).length;
+  const topById = new Map(manifest.skills.map((s) => [s.id, s]));
+  const skillIds = [...new Set([...topById.keys(), ...Object.keys(variants)])];
+  const reach = new Map(skillIds.map((id) => [id, skillReach(topById.get(id), variants[id])]));
+  // Restricted = missing in some known country, whichever version would otherwise have covered it.
+  const restrictedSkills = skillIds.filter((id) => reach.get(id).presenceSpec).length;
   const restrictedRules = manifest.rules.filter((r) => r.country).length;
   const variantIds = Object.keys(variants);
   if (restrictedSkills === 0 && restrictedRules === 0 && variantIds.length === 0) return [];
   const lines = [`country-restricted: ${restrictedSkills} skill(s), ${restrictedRules} rule(s)`];
   if (variantIds.length > 0) {
+    // Each version with the countries it actually WINS (resolution order applied), so an author sees
+    // e.g. that an excluding variant does not take the countries a named variant already has.
     const describe = (id) =>
-      `${id} (${variants[id].map((v) => `${v.name}: ${describeCountrySpec(v.country)}`).join('; ')}${topIds.has(id) ? '; top level: the rest' : ''})`;
+      `${id} (${reach
+        .get(id)
+        .versions.map((v) => `${v.name ?? 'default'}: ${describeCountrySpec(v.spec)}${v.name === null ? ' + unknown' : ''}`)
+        .join('; ')})`;
     lines.push(`country variants: ${variantIds.map(describe).join(', ')}`);
   }
   const gaps = findCountryReferenceGaps(manifest);

@@ -190,9 +190,9 @@ The mapping sticks to the install — `--update` reapplies it automatically. To 
 Some skills and rules only apply in certain countries (a South Korean postcode widget, say), or do not apply in one. The plugin marks those with a `country:` tag — `KR` or `KR, US, CA` = only these countries, `-KR` = every country but these, untagged or no code (`country:`) = everywhere — and the installer installs only what applies to your country.
 
 - **What gets filtered:** whole skills and rules, before the picker. An item not offered in your country is not in the list, not in `-y`'s "everything", and not written to disk. The core rules (`weegloo-version`, `weegloo-terms-consent`) always install. An MCP-only install makes no country lookup.
-- **Country versions of one skill:** a skill can also ship a different version per country under the same name (say, one payment guide for KR and another for everyone else). The installer writes the version for your country into that skill's folder, so only one version is ever on disk; switching countries with `--update --country <cc>` replaces it. A skill that exists only as country versions is not installed when your country is unknown.
+- **Country versions of one skill:** a skill can also ship a different version per country under the same name (say, one payment guide for KR and another for everyone else). The installer writes the version for your country into that skill's folder, so only one version is ever on disk; switching countries with `--update --country <cc>` replaces it. Which version: one that names your country, else the one "every country but …" version if you are not on its list, else the skill's default. Every skill has a default, and it is what you get when your country is unknown.
 - **How the country is found:** `--country <cc>` (or `WEEGLOO_COUNTRY`) if given; otherwise one unauthenticated `GET https://ai.weegloo.com/v1/country` (`{ "country": "KR" }`), made in parallel with the manifest fetch. The answer is inferred from your network, so a VPN, a corporate proxy or a CI runner abroad can misplace you — pin it with `--country`.
-- **Fail-open:** if the lookup fails or answers something that is not a country (offline, a timeout, `XX`), nothing is filtered — every skill/rule installs, exactly as before this feature, except skills that exist only as country versions — and a yellow warning says so.
+- **Fail-open:** if the lookup fails or answers something that is not a country (offline, a timeout, `XX`), nothing is filtered — every skill/rule installs in its default version, exactly as before this feature — and a yellow warning says so.
 - **`--update` keeps the recorded country:** the country an install was filtered with is saved in `.weegloo/<agent>/installed.json` and reused, so an update makes no lookup and your set does not change because you travelled. An install that recorded none (an older install, or one whose lookup failed) looks it up once on its next update and records the result.
 - **Changing it:** `--update --country <cc>` re-filters with the new country and records it — items no longer offered are removed, items newly offered are added. Unlike `--origins`, this is allowed on update: the country changes only skills/rules, never MCP config.
 - **Staging / tests:** `WEEGLOO_COUNTRY_URL` replaces the lookup URL, and an [origins mapping](#origins-mapping-staging--enterprise) with an `ai` key moves it along with the rest of the stack (`"ai": "https://dev-ai.weegloo.com"` → `https://dev-ai.weegloo.com/v1/country`).
@@ -205,7 +205,7 @@ npx weegloo@latest -y --agent claude --no-mcp --country KR
 npx weegloo@latest --agent claude --location global --update --country KR
 ```
 
-The Claude Code and Cursor plugin marketplaces read the repository files directly, so installs made that way are not country-filtered: they get each skill's default version, and skills that exist only as country versions are not there at all.
+The Claude Code and Cursor plugin marketplaces read the repository files directly, so installs made that way are not country-filtered: they get each skill's default version in every country.
 
 ## Installation Flow
 

@@ -15,6 +15,7 @@ import {
   countrySubset,
   findCountryReferenceGaps,
   normalizeCountryVariants,
+  pickCountryVariant,
 } from '../src/country.js';
 
 // ── the tag grammar ─────────────────────────────────────────────────────────
@@ -348,15 +349,25 @@ test('filterResourcesByCountry: a variant replaces the whole skill and is report
 });
 
 test('normalizeCountryVariants: accepts the builder shape, rejects anything else', () => {
-  const ok = { 'weegloo-x': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'x' } }] };
-  assert.deepEqual(normalizeCountryVariants(ok), ok);
+  const ok = {
+    'weegloo-x': [
+      { name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'x' } },
+      { name: '-jp-cn', country: { exclude: ['CN', 'JP'] }, files: { 'SKILL.md': 'rest' } },
+    ],
+  };
+  assert.deepEqual(normalizeCountryVariants(ok), ok, 'one excluding variant beside named ones is valid');
   const bad = [
     null,
     [],
     { 'weegloo-x': [] },
     { 'weegloo x': ok['weegloo-x'] },
     { 'weegloo-x': [{ name: 'k.r', country: { include: ['KR'] }, files: { 'SKILL.md': 'x' } }] },
-    { 'weegloo-x': [{ name: 'kr', country: { exclude: ['KR'] }, files: { 'SKILL.md': 'x' } }] },
+    {
+      'weegloo-x': [
+        { name: 'a', country: { exclude: ['KR'] }, files: { 'SKILL.md': 'a' } },
+        { name: 'b', country: { exclude: ['JP'] }, files: { 'SKILL.md': 'b' } },
+      ],
+    },
     { 'weegloo-x': [{ name: 'kr', files: { 'SKILL.md': 'x' } }] },
     { 'weegloo-x': [{ name: 'kr', country: { include: ['KR'] }, files: {} }] },
     { 'weegloo-x': [{ name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 1 } }] },
@@ -399,4 +410,58 @@ test('findCountryReferenceGaps: presence counts variants, and a variant is its o
     ],
     'weegloo-pay is everywhere (top level + variant); its KR variant may name a KR-only skill'
   );
+});
+
+// ── the resolution rule, on the layout it was specified with ─────────────────────────────
+//   default (top level) + variants kr (KR), us (US), de_fr (DE, FR), -jp-cn (-JP, -CN)
+// Known country: a variant naming it → the excluding variant → the default. Unknown → the default.
+
+const EXAMPLE_RESOURCES = {
+  skills: [{ id: 'weegloo-addr', files: { 'SKILL.md': 'default', 'references/d.md': 'd' } }],
+  rules: [],
+  variants: {
+    'weegloo-addr': [
+      { name: '-jp-cn', country: { exclude: ['CN', 'JP'] }, files: { 'SKILL.md': 'rest' } },
+      { name: 'de_fr', country: { include: ['DE', 'FR'] }, files: { 'SKILL.md': 'de-fr' } },
+      { name: 'kr', country: { include: ['KR'] }, files: { 'SKILL.md': 'kr', 'references/k.md': 'k' } },
+      { name: 'us', country: { include: ['US'] }, files: { 'SKILL.md': 'us' } },
+    ],
+  },
+};
+
+test('pickCountryVariant: a named country beats the excluding variant; then the default', () => {
+  const body = (country) =>
+    filterResourcesByCountry(EXAMPLE_RESOURCES, country).resources.skills.find((s) => s.id === 'weegloo-addr')?.files['SKILL.md'];
+  assert.equal(body('KR'), 'kr', 'KR matches kr AND -jp-cn — the named one wins');
+  assert.equal(body('US'), 'us');
+  assert.equal(body('DE'), 'de-fr');
+  assert.equal(body('FR'), 'de-fr');
+  assert.equal(body('BR'), 'rest', 'a third country takes the excluding variant');
+  assert.equal(body('GB'), 'rest');
+  assert.equal(body('JP'), 'default', 'excluded by -jp-cn and named by nobody → the default');
+  assert.equal(body('CN'), 'default');
+  assert.equal(body(null), 'default', 'country unknown → the default');
+});
+
+test('pickCountryVariant: reads the tag only — the folder name means nothing', () => {
+  const misleading = [{ name: 'kr', country: { include: ['US'] }, files: {} }];
+  assert.equal(pickCountryVariant(misleading, 'KR'), undefined);
+  assert.equal(pickCountryVariant(misleading, 'US').name, 'kr');
+});
+
+test('filterResourcesByCountry: a variant installs its own files only — whole replacement', () => {
+  const kr = filterResourcesByCountry(EXAMPLE_RESOURCES, 'KR').resources.skills[0];
+  assert.deepEqual(kr, { id: 'weegloo-addr', files: { 'SKILL.md': 'kr', 'references/k.md': 'k' } });
+  const jp = filterResourcesByCountry(EXAMPLE_RESOURCES, 'JP').resources.skills[0];
+  assert.deepEqual(jp.files, { 'SKILL.md': 'default', 'references/d.md': 'd' });
+});
+
+test('filterResourcesByCountry: a default with its own exclusion keeps the skill out where no variant takes it', () => {
+  const r = {
+    ...EXAMPLE_RESOURCES,
+    skills: [{ id: 'weegloo-addr', country: { exclude: ['CN', 'JP'] }, files: { 'SKILL.md': 'default' } }],
+  };
+  assert.deepEqual(filterResourcesByCountry(r, 'JP').excludedSkills, ['weegloo-addr']);
+  assert.equal(filterResourcesByCountry(r, 'KR').resources.skills[0].files['SKILL.md'], 'kr');
+  assert.equal(filterResourcesByCountry(r, null).resources.skills[0].files['SKILL.md'], 'default', 'unknown still gets the default');
 });

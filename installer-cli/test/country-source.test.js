@@ -212,7 +212,12 @@ test('loadResources: a malformed variants map rejects the whole manifest', async
     null,
     [],
     { 'weegloo-pay': [] },
-    { 'weegloo-pay': [{ name: 'kr', country: { exclude: ['KR'] }, files: { 'SKILL.md': 'x' } }] },
+    {
+      'weegloo-pay': [
+        { name: 'a', country: { exclude: ['KR'] }, files: { 'SKILL.md': 'x' } },
+        { name: 'b', country: { exclude: ['JP'] }, files: { 'SKILL.md': 'y' } },
+      ],
+    },
     { 'weegloo-pay': [{ name: 'kr', country: { include: ['KR'] }, files: {} }] },
   ];
   for (const bad of malformed) {
