@@ -14,9 +14,9 @@ subscription and plan billing is a different thing entirely and is not configure
 Weegloo hosts no backend of yours. **The only place your server-side payment logic can run is a
 Script** (`weegloo-script`) — which means:
 
-> **The browser may never be what decides a payment succeeded.** Amount, currency and status are
-> established server-side, inside a Script, from something the PG said — never from the request
-> payload.
+> **The browser may never be what decides a payment succeeded, or what it costs.** The amount is
+> computed inside a Script from prices the buyer cannot write, and whether it was paid comes from
+> what the PG said — never from the request payload, or from a row the buyer wrote.
 
 Everything below is a consequence of that one rule.
 
@@ -130,7 +130,8 @@ Model it before §3. **`ShortText` stops at 64 characters**, so the split is not
 | field | type | why |
 |---|---|---|
 | `orderId`, `status` | `ShortText` | yours, and you keep them short — Toss's API reference requires `orderId` to be 6–64 characters of letters, digits, `-`, `_` |
-| `amount` | `Long` | KRW has no minor unit; an integer, never a string |
+| `amount` | `Long` | KRW has no minor unit; an integer, never a string — **written only by *The order Script*** |
+| `product`, `quantity` | `Refer` → Content (`referContentType`: the `product` type), `Long` | what that Script priced — a relationship is a `Refer`, not an id in a `ShortText` (`weegloo-create-content-type`); fulfil from these, never from what the success page sends |
 | `paymentKey` | **`RichText`** | Toss allows up to **200** characters — past the cap on its own |
 | `receiptUrl` (`receipt.url`) and any provider URL | **`RichText`** | a provider URL is Toss's to shape, not yours |
 | any other Toss id or token you store — never the 가상계좌 `secret` (§4) | **`RichText`** | the length is Toss's to change, not yours |
@@ -144,25 +145,102 @@ A `ShortText` here breaks nothing until Toss issues a `paymentKey` longer than 6
 64` **after** the confirm call has already approved the payment — the money moved, and the order still
 reads `pending`.
 
+### The order Script — the amount is priced here, never on the page
+
+**The amount Toss is asked to approve is computed by a Script, from a price the buyer cannot
+write.** A row the buyer writes is not server-side, whichever API it goes through: if the page
+creates the order, a buyer stores `amount: 100` for a 10,000원 item, pays 100, and §4 compares 100
+with 100 — the order reads `paid`, with no error anywhere. Set up three things before the first
+order:
+
+- **A `product` ContentType** — `name` (`LongText`) and `price` (`Long`, KRW) — written and
+  published by staff in the console. The storefront reads it over CDA; the buyer's role needs no
+  write on it, because this Script reads it with its author's authority.
+- **This Script**, `method: "Post"`, authored as an admin (the author gate, `weegloo-script`). The
+  page sends only *what* is bought — `orderId` (`crypto.randomUUID()` on the page: a Script has no
+  source of randomness), `productId`, `quantity` — never what it costs:
+
+  ```jsonc
+  { "type": "ResourceRead", "name": "product", "resource": "Content",
+    "target": { "sys": { "id": "{ /payload/productId }" } }, "from": "Published" },
+
+  { "type": "If", "condition": { "or": [
+        { "!==": [ "{ /product/sys/contentType/sys/id }", "<productCtId>" ] },
+        { "!": { ">": [ "{ /product/fields/price/en-US }", 0 ] } },
+        { "<": [ "{ /payload/quantity }", 1 ] },
+        { ">": [ "{ /payload/quantity }", 99 ] },                        // your own cap
+        { "!==": [ { "%": [ "{ /payload/quantity }", 1 ] }, 0 ] },
+        { "!": "{ /payload/orderId }" } ] },
+    "then": [ { "type": "Return", "isError": true, "statusCode": 400, "value": "invalid order" } ] },
+
+  { "type": "ResourceCreate", "name": "order", "resource": "Content",
+    "contentType": { "sys": { "id": "<orderCtId>" } }, "locale": "en-US", "propagateEvents": true,
+    "fields": { "orderId": "{ /payload/orderId }", "status": "pending",
+      "product": { "sys": { "type": "Refer", "id": "{ /product/sys/id }", "targetType": "Content" } },
+      "quantity": "{ /payload/quantity }",
+      "amount": { "$*": [ "{ /product/fields/price/en-US }", "{ /payload/quantity }" ] } } },
+
+  { "type": "Return", "value": { "orderId": "{ /payload/orderId }",
+      "orderName": "{ /product/fields/name/en-US }",
+      "amount": { "$*": [ "{ /product/fields/price/en-US }", "{ /payload/quantity }" ] } } }
+  ```
+
+  - **Keep the ContentType check.** `ResourceRead` fetches any Content by id with the author's
+    authority, so without it a buyer passes the id of another row that carries a `price` — one
+    they wrote themselves included. An id that is no published product fails the read or the
+    check, and nothing is created.
+  - **Keep `propagateEvents: true`.** A Script's writes are silent by default and never reach the
+    search index; §4 finds this order by searching, so without it every confirm answers `404`.
+  - **A cart** prices every line the same way — `Loop` over the lines with a declared
+    `maxIterations`, `SetVar` to add them up (`weegloo-script`) — and stores the lines it priced;
+    it never totals what the page sent.
+- **The buyer's `ServiceUserRole`** — at most `Read` on their own orders (over ACDA the order type
+  needs `publishWithAuthor: true`), `Execute` on this Script and §4's, and no `Create`, `Edit` or
+  `All` on the order, `product` or entitlement type:
+
+  ```json
+  "content": { "Read": { "Allow": [ {
+      "contentType": { "sys": { "type": "Refer", "id": "<orderCtId>", "targetType": "ContentType" } },
+      "createdBy": { "sys": { "type": "Refer", "id": ":self", "targetType": "User" } } } ] } },
+  "script": { "Execute": { "Allow": [
+      { "self": { "sys": { "type": "Refer", "id": "<orderScriptId>", "targetType": "Script" } } },
+      { "self": { "sys": { "type": "Refer", "id": "<confirmScriptId>", "targetType": "Script" } } }
+  ] } }
+  ```
+
+⚠️ **Each of these reopens the hole, silently:** any `Create`, `Edit` or `All` that reaches the
+order type — the buyer then writes their own `amount`, or `status: "paid"` without paying —
+including a `createdBy :self` rule with no `contentType`, because a row this Script writes is the
+buyer's by `sys.createdBy` (§4); any write on the `product` type; a price taken from
+`{ /payload/… }`; and a guest checkout that writes orders with a token instead of calling this
+Script.
+
 ### 3. Client — render, then request
 
 ```js
 const tossPayments = TossPayments("test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm");
 const widgets = tossPayments.widgets({ customerKey });   // guests: TossPayments.ANONYMOUS
 
-await widgets.setAmount({ currency: "KRW", value: total });
+await widgets.setAmount({ currency: "KRW", value: listedPrice * quantity });   // display only
 await Promise.all([
   widgets.renderPaymentMethods({ selector: "#payment-method", variantKey: "DEFAULT" }),
   widgets.renderAgreement({ selector: "#agreement", variantKey: "AGREEMENT" }),
 ]);
 
-// only after the UI has rendered
-await widgets.requestPayment({ orderId, orderName, successUrl, failUrl });
+// on 결제하기, only after the UI has rendered — the order Script prices it, Toss is asked for that
+// createOrder = POST https://script.weegloo.com/v1/spaces/{spaceId}/scripts/{orderScriptId}/execute
+//               with the buyer's Bearer, reading `.return` off the response
+const order = await createOrder({ orderId: crypto.randomUUID(), productId, quantity });
+await widgets.setAmount({ currency: "KRW", value: order.amount });
+await widgets.requestPayment({ orderId: order.orderId, orderName: order.orderName,
+                               successUrl, failUrl });
 ```
 
-- **Write the order to Weegloo — `status: "pending"` — BEFORE `requestPayment()`.** Toss requires
-  `orderId` + `amount` to be stored server-side first, and that stored row is the *only* amount you
-  may trust at confirm time (§4).
+- **The order Script writes the order — `status: "pending"` — BEFORE `requestPayment()`; the page
+  never does.** Toss requires `orderId` + `amount` to be stored server-side first, and that stored
+  row is the *only* amount you may trust at confirm time (§4) — trustworthy because a Script priced
+  it. The first `setAmount` is display only; the second passes Toss the amount the Script returned,
+  which is the one §4 confirms.
 - **`customerKey`** — a stable, unguessable per-buyer string for a signed-in Service User; never an
   email, a sequential id, or anything a stranger could type.
 - **`successUrl` / `failUrl` must be absolute and actually reachable.** On Weegloo WebHosting that is
@@ -183,6 +261,9 @@ amount comparison, same write-back:
 { "type": "ResourceFind", "name": "order", "resource": "Content",
   "contentType": { "sys": { "id": "<orderCtId>" } },
   "where": { "createdBy": ":self", "fields.orderId": "{ /payload/orderId }" } },
+
+{ "type": "If", "condition": { "==": [ "{ /order }", null ] },
+  "then": [ { "type": "Return", "isError": true, "statusCode": 404, "value": "unknown order" } ] },
 
 { "type": "Http", "name": "confirmed", "method": "POST",
   "url": "https://api.tosspayments.com/v1/payments/confirm",
@@ -205,7 +286,10 @@ amount comparison, same write-back:
 ```
 
 - **`amount` comes from `{ /order/… }`, never from `{ /payload/amount }`.** The `successUrl` query
-  param is client-controlled — comparing it to itself proves nothing.
+  param is client-controlled — comparing it to itself proves nothing. If the page changed the
+  widget amount anyway, Toss refuses this confirm, because it differs from the amount the buyer
+  authenticated; handle that like its other failure codes (below). Nothing is charged — approval,
+  not authentication, is what debits.
 - **Precompute the `Basic` value.** A Script cannot base64-encode an arbitrary string, so encode
   `secretKey + ":"` at authoring time and store the finished `Basic …` string with `"secret": true`.
   The literal above is exactly `base64("test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6:")` — recompute it if
@@ -246,7 +330,11 @@ amount comparison, same write-back:
   without a `contentType` reaches it, silently. The receiver asks Toss's 결제 조회 API instead and
   needs no copy (`references/callback-receiver.md` → *The Toss 가상계좌 deposit*).
 - **Guest checkout** has no caller to resolve `:self` against — drop the `createdBy` filter and match
-  on `orderId` alone, which then has to be long and random rather than sequential.
+  on `orderId` alone, which then has to be long and random rather than sequential. The order still
+  comes from *The order Script*, which uses no `:self` — never from a token that can create orders.
+  With no buyer Bearer, the page calls both Scripts with a `SpaceAccessToken` whose `SpaceRole`
+  holds only `script.Execute`, pinned with `self` to the two Scripts — and no `Read` on orders:
+  every guest shares that token's `:self`, so such a rule would show each guest every guest's order.
 - Toss's own failure codes (`NOT_FOUND_PAYMENT_SESSION`, `REJECT_CARD_COMPANY`, `UNAUTHORIZED_KEY`, …)
   arrive as a `4XX` body — answer from `else` / `catch` and do not echo the provider message verbatim
   to the buyer.
@@ -303,10 +391,11 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
    `Http` statement and its `Basic …` header — and the 가상계좌 deposit receiver Script, which holds
    the same header, if one was built — and **every `test_gck_…` / `test_gsk_…` string left in the
    tree**. No dead Toss path, no orphan test key.
-3. **Keep what is provider-neutral**: the order / receipt / entitlement ContentTypes, the `:self`
-   ownership scoping, the amount-verification rule, the idempotency receipt.
-4. **Re-verify the invariants**: amount read from your own record, signature checked as the first
-   statement if the new provider pushes, no secret in client code.
+3. **Keep what is provider-neutral**: the product / order / receipt / entitlement ContentTypes, the
+   order Script and the buyer's read-only role on orders, the `:self` ownership scoping, the
+   amount-verification rule, the idempotency receipt.
+4. **Re-verify the invariants**: amount priced by the order Script and read from the order row,
+   signature checked as the first statement if the new provider pushes, no secret in client code.
 
 ---
 
@@ -343,15 +432,17 @@ as a trigger only and asks Toss's 결제 조회 API before it writes — the one
 
 1. The frontend completes the PG's client flow and receives a **payment id / token** (plus the PG's
    redirect params). It calls the Script with just those identifiers.
-2. The Script **reads the order it created earlier** (`ResourceRead` / `ResourceFind` with
-   `where: { "createdBy": ":self" }`) to learn the **expected amount** — from your own record.
+2. The Script **reads the order a Script created earlier** (`ResourceRead` / `ResourceFind` with
+   `where: { "createdBy": ":self" }`) to learn the **expected amount** — priced from records the
+   buyer cannot write (*The order Script*); an order the buyer wrote hands their own number back.
 3. `Http` GET/POST to the PG's verify endpoint, secret key in a header with **`"secret": true`**.
 4. **Compare** the PG's reported amount + currency + order id against step 2. Mismatch ⇒ `Return`
    with `isError: true` and do not fulfil.
-5. `ResourceCreate` / `ResourcePatch` the order → paid, and only then grant the entitlement.
+5. `ResourcePatch` the order → paid, and only then grant the entitlement.
 
 - **Send or compare the amount you recorded, not the amount the caller sent.** A verify call that the
-  provider itself amount-checks only protects you if the amount you sent came from your own record.
+  provider itself amount-checks only protects you if the amount you sent came from your own record,
+  priced by a Script — a row the buyer wrote is the amount the caller sent.
 - The PG round trip happens **inside the run**, while the frontend waits on `/execute` — keep the
   `Http` `timeoutMs` tight, and answer a failed or unconfirmed payment from `catch` / `else` rather
   than letting the run hit its budget. Budget: `weegloo-script`.
@@ -385,8 +476,9 @@ compromised if an end-user role can already read it.
   going live or replacing a provider means removing the test path, not layering over it (§6).
 - **Never put a secret key, or its `Basic …` header, in client code.** The client key is the only Toss
   key the browser may see; the secret key lives in `Http.headers` with `"secret": true`.
-- **Never trust a client-reported amount, currency or status.** Read the amount from your own order
-  record, or from the PG's API response.
+- **Never trust a client-reported amount, currency or status — a row the buyer wrote is
+  client-reported.** The amount comes from *The order Script*; the PG's response says what was
+  paid, and must equal it. The buyer's role never writes the order or `product` type.
 - **Never store card data** — PAN, CVC, expiry — in Content, Media, or a Script payload. Use the PG's
   tokenization; that is what it is for.
 - **Never fulfil in the browser** — grant the entitlement from the Script that established payment.

@@ -253,8 +253,8 @@ about where a `secret` may live, which the page cannot see.
   refused on every retry means the find missed the order or `SKILL.md` §4 never stored the
   `paymentKey`, and Toss's failure email is the alarm. No `Return` echoes the order or Toss's body.
 - **Decide from `ResourceRead`, not from the search.** The find reads the indexed copy, which has
-  `orderId` because the buyer wrote the order before `requestPayment` (if a Script creates it, that
-  create needs `propagateEvents: true` — `SKILL.md` §4's own find depends on the same). `paymentKey`
+  `orderId` because the order Script creates it with `propagateEvents: true` (`SKILL.md` → *The
+  order Script*; §4's own find depends on the same). `paymentKey`
   and `status` come from **silent** Script patches — §4's and this receiver's — so they are taken
   from `ResourceRead`, which never uses the index. **No write here needs `propagateEvents: true` to
   be correct**; set it on the two patches only if a `Webhook` fulfils, or stops fulfilment, from
