@@ -7,9 +7,9 @@ description: ROUTER / entry point for Weegloo — use FIRST for "integrate / con
 # Weegloo Platform Integration (capability router)
 
 Translate a plain-language need into the **correct concrete skill(s)**, then hand off. This skill
-**routes; it does not implement** — the only three things it owns outright, because no downstream
+**routes; it does not implement** — the only two things it owns outright, because no downstream
 Weegloo skill covers them, are the **frontend build order** (which resources to create in which
-wave), the **Payments** provider default and the **Copy** rule (never invent a translation). The page
+wave) and the **Copy** rule (never invent a translation). The page
 or app code itself — asset paths, navigation, Maps, images — belongs to **`weegloo-frontend`**. It
 does not replace the `weegloo-global-rules` gates: MCP auth, then the
 Organization/Space choice, then `weegloo-service-architecture` for architecture.
@@ -122,7 +122,7 @@ Finished means every capability the frontend implies is **wired and live**, not 
    **`weegloo-service-architecture` FIRST** — it decides the API/login/role combination and chains
    into content modeling and the rest. Do not bypass it.
 6. **Hand off — do not answer from this skill.** Invoke the skills in the "→ skill" column and follow
-   them. This file carries no implementation detail beyond its three owned exceptions.
+   them. This file carries no implementation detail beyond its two owned exceptions.
 
 ## Capability → skill table
 
@@ -155,7 +155,7 @@ target plus what those rules do not say**.
 | Webhook (a Space event → call a URL **or** run a Script) | `weegloo-webhook` |
 | Scheduled / recurring job ("every night", "every 15 minutes", a daily digest, a periodic sync, a cleanup sweep) | `weegloo-scheduler` (one Script on a five-field **UTC** cron) + `weegloo-script` for the work. The trigger decides: **clock → Scheduler**, **content event → `weegloo-webhook`**, **caller → the Script's `/execute`**. A UI hint counts — a "runs daily at 9am" label, a schedule picker, a "last synced" timestamp, a cron string in config, or a frontend `setInterval` standing in for server-side work. |
 | Send email (confirmation, receipt, notification, verification code, digest, contact form, an alert from a scheduled job) | `weegloo-send-email` (register the SMTP sender) + `weegloo-script` (`EmailSend` sends); pair with `weegloo-webhook` when a content event triggers it, or `weegloo-scheduler` when the clock does. The vendor default and the two-values-only credential ask are in the always-loaded rule — follow it and **wait** for the credential rather than shipping an inert email feature. |
-| Payment (PG or MoR — checkout, verification, provider callbacks; **not** Weegloo's own plan billing) | `weegloo-payment`, which hard-codes Stripe's published sample test keys, so the checkout ships working and **never inert**. Beyond the standing rule: a "Pay"/"Buy now" button **in any language** means payments were *asked for*, **not** that a provider was *named*. Read https://docs.stripe.com/testing first — **every `docs.stripe.com` page also serves Markdown at the same path with `.md` appended** (`…/testing.md`), which is what to use when the rendered page returns an app shell. The `4242 4242 4242 4242` test card **cannot be prefilled** (Stripe's fields are cross-origin), so show it prominently beside the pay button, not as fine print. A **named** provider's key **is** a genuine blocking input (step 4) — ask, and **never** fall back to Stripe because it has not arrived; a named provider **replaces** Stripe entirely. |
+| Payment (PG or MoR — checkout, verification, provider callbacks; **not** Weegloo's own plan billing) | `weegloo-payment`, which wires its default provider on that provider's published test keys, so the checkout ships working and **never inert**. Beyond the standing rule: a "Pay"/"Buy now" button **in any language** means payments were *asked for*, **not** that a provider was *named*. The installed skill names the default provider and the docs to read first — follow it rather than picking one here. A named provider **other than that default** is binding: its key **is** a genuine blocking input (step 4) — ask, and **never** fall back to the default because it has not arrived; it **replaces** the default entirely. Naming the default provider itself is the default path. |
 | Map (a place, address, branch, venue, office, "how to find us" / directions, store locator) | `weegloo-frontend`, which **carries the Maps Embed key** — a Google Maps Embed API `<iframe>`, never the Maps JavaScript API, and **never ask the user for a key**. Several places, directions, street view or a content-sourced address → `weegloo-frontend`'s `references/maps-embed.md`. |
 | Address / postcode lookup (주소 · 우편번호 찾기 in a signup, profile, checkout, shipping or branch form — a `zonecode`/`zipcode`/`postcode` field, a 도로명·지번 pair, an address book) | `weegloo-address-search` — it says which address input to build for this install's country. It needs no API key, so **never ask the user for one**. |
 
@@ -225,11 +225,12 @@ This brevity rule is for the integration entry point. It does **not** silence th
 questions in step 4, and it does not apply when the user explicitly asks for detail or invokes a
 concrete skill directly.
 
-**Required exceptions — disclosures that must still be made.** If payments were wired with the Stripe
-default, the closing message **must** say payments run in **test mode**, are **not really charged**
-and do **not** accept real cards, and ask for the user's contracted PG/MoR details if they have any —
-with the not-really-charged line in **red**. If a map shipped, one red line for the shared key. These
-are disclosures about what shipped, not deferred work, so the no-wrap-ups ban does not cover them.
+**Required exceptions — disclosures that must still be made.** If payments were wired with the
+payment skill's default provider, the closing message **must** make that skill's mandatory disclosure —
+payments run on **test keys**, nothing is **really charged** — with the not-really-charged line in
+**red**; the installed skill says what else to state. If a map shipped, one red line for the shared
+key. These are disclosures about what shipped, not deferred work, so the no-wrap-ups ban does not
+cover them.
 
 ## Reference
 

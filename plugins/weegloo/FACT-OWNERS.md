@@ -119,6 +119,7 @@ git worktrees.
   - `rules/weegloo-global-rules.mdc`
   - `skills/weegloo-create-content-type/SKILL.md`
   - `skills/weegloo-payment/SKILL.md`
+  - `skills/weegloo-payment/variants/kr/SKILL.md`
 - **why**: No `forbidden` pattern — the corpus has never stated the cap wrongly, and a pattern matching nothing scores exactly like a deleted row (see the header). The drift risk is a second site that keeps the "identifier-like strings → ShortText" half without the "whose length you control" half; that teaches the choice that shipped a broken checkout. `weegloo-address-search` is deliberately **not** listed: it names only the `maxlength` consequence, which is what a non-owner mention should look like.
 
 ### put-is-full-replacement
