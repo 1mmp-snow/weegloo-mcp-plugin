@@ -332,10 +332,11 @@ a Weegloo User / `DeliveryAccessToken` / `SpaceAccessToken`.
 it. One Script does the whole thing.
 
 1. **Author a Script** (`method: "Post"`) that: optionally validates/charges (`ResourceFind` the
-   caller's wallet by `where: { "createdBy": ":self" }`, `If` balance check, `ResourcePatch` to
-   deduct — wrap risky steps in `Try`/`catch` to refund); `Http` POSTs to the provider (key in a
-   `secret` header); `ParseJson` when the provider nests JSON inside a string; writes the result back
-   with `ResourceCreate`/`ResourcePatch` (a text field, or a **Media** ingest for images); `Return`s a
+   caller's wallet by `where: { "createdBy": ":self" }`, `Return` if it is `null`, `ResourceRead` it
+   by that id, `If` balance check, a version-locked `ResourcePatch` to deduct — and put the `Http` in
+   a `Try` whose `catch` refunds); `Http` POSTs to the provider (key in a `secret` header);
+   `ParseJson` when the provider nests JSON inside a string; writes the result back with
+   `ResourceCreate`/`ResourcePatch` (a text field, or a **Media** ingest for images); `Return`s a
    small summary.
    ⚠️ **The balance check holds only if the caller's role has no `Create`, `Edit` or `All` on the
    wallet ContentType** — with any of them the caller writes their own balance, and the check passes
@@ -345,13 +346,38 @@ it. One Script does the whole thing.
    Give the caller's role `Read` on the wallet at most, create it from a Script the caller runs (a
    wallet staff create is not theirs: the find misses it), and credit it only from staff or from a
    Script that verified the payment (`weegloo-payment`) — never by an amount the caller sent.
+   ⚠️ **Lock the deduction to the wallet's `sys.version`** — unlocked, two concurrent runs both pass
+   the balance check and both write the same reduced balance: two provider calls paid for once. Take
+   the balance and version from the **`ResourceRead`**, not from the `ResourceFind` that located the
+   wallet — a find reads the synced copy, which trails the writes (*Resource reads*) and need not hold
+   the last deduction, so a version taken from it can refuse a run that raced nothing. The deduct
+   `ResourcePatch` carries `"version": "{ /wallet/sys/version }"` (`wallet` = that read) in a `Try` of
+   its own, whose `catch` `Return`s `409` with `"retry": true` — never the refund's `catch`: a refused
+   deduction took nothing, and refunding it pays the caller for racing. The deduction runs before the
+   `Http`, so a refused run calls no provider. The refund is a second write, and the deduction spent
+   the first read's version: `ResourceRead` the wallet again and add the cost back under *that*
+   read's version, retrying a conflict in a `Loop` (`while` a `SetVar` flag the refund sets is unset,
+   a small `maxIterations`, a `Try` per pass) — a counted loop refunds on every pass. Worked block:
+   `references/patterns.md` §2 (*Concurrency-safe writes*).
 2. **Grant `script.Execute`** to the caller's role (above).
 3. **Frontend**: `POST …/scripts/{id}/execute` with the payload and read the result off the response.
    **When the provider is too slow for one run**, keep the wait off the request: the frontend creates
    a job Content row, a **`Webhook`** on `Content.Create` runs the Script that calls the provider and
    writes the result back, and the frontend **polls that row by `sys.id`**. If that job Content is
    polled on **ACDA / CDA** under a `createdBy :self` role, its ContentType needs
-   **`publishWithAuthor: true`** or the delivery read matches nothing.
+   **`publishWithAuthor: true`** or the delivery read matches nothing. The user's role on the job
+   type is `Create` plus `Read`/`Delete` under `createdBy :self` — no `Edit` or `All`, and no
+   `createdBy :self` `Edit`/`All` rule without a `contentType` (the usual member default reaches the
+   job rows and hands `Edit` back). The Script writes the result (and any status) on every path, each
+   `catch` included — a Webhook run's `Return`, the deduction's `409` too, reaches no one, and
+   `Create` writes every field, so a row can arrive pre-filled. Anything that must be proof — a
+   charge, a credit — goes in a row the Script creates on a type the user's role holds no `Create`,
+   `Edit` or `All` on, never in the job row: `weegloo-space-role` →
+   `references/script-permissions.md` (*async external-API job*). A Webhook-run Script's `:self` is
+   the webhook's **creator** under the default `runAs: HookOwner`, so step 1's wallet find would match
+   the creator's wallet and the rows it creates would be the creator's, which the user's `:self`
+   `Read` never finds: give that Webhook (and step 4's, when its Script relies on `:self`)
+   **`runAs: EventUser`** (`weegloo-webhook`).
 4. **Event-driven variant**: attach the Script to a **Webhook** (`script` Refer, on e.g.
    `Content.Create`) so it runs automatically instead of being called.
 

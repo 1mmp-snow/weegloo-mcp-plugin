@@ -502,7 +502,7 @@ skills/weegloo-address-search/
 ### 5.2 fixtures — 모든 코퍼스 변경이 통과해야 하는 관문
 
 바이트를 세는 검사는 "중복을 지웠다"와 "게이트를 지웠다"를 **똑같이 만족**시킨다. 구분하는 것은
-`tests/run-fixtures.mjs`뿐이다. 현재 **23 fixture / 69 assert** (한국어 17, 영어 6),
+`tests/run-fixtures.mjs`뿐이다. 현재 **26 fixture / 80 assert** (한국어 20, 영어 6),
 `tests/baseline.develop.json` 기준으로 **assert 단위** 비교한다.
 
 fixtures는 저장소가 아니라 `~/.claude/`에 **설치된** 코퍼스를 측정한다. 파일을 고쳐도 installer를

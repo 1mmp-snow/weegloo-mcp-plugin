@@ -16,13 +16,16 @@
  *    grants points, so a design that never thinks about the replay credits them on every call.
  *
  * NO PROVIDER IS NAMED, on purpose: a KR install gets the Toss variant of `weegloo-payment` and every
- * other country the Stripe default, and the three asserts are meant to hold for both. That is also
- * why `grant-once` accepts "the provider refuses a second approval": Toss refuses a second confirm of
- * the same payment (32c6442's message), so the KR default path cannot grant twice through its confirm
- * — Stripe's session GET has no such provider-side guard, and a default-corpus answer needs its own.
- * The KR corpus does NOT say so, though, and its §4 confirm has no already-paid guard: a KR answer
- * that copies §4 cannot grant twice, yet scores NO here unless it applies *A. Confirm* step 5 or
- * states the refusal. Read a KR `grant-once` failure before believing it.
+ * other country the Stripe default, and the three asserts are meant to hold for both. Both confirm
+ * Scripts carry the same guard — the default's §6c and the KR §4 re-read the order by id, return
+ * early for an order already confirmed (before the provider is called), and version-lock the paid
+ * patch — so an answer that copies either one passes `grant-once` on the guard itself.
+ * `grant-once` also accepts "the provider refuses a second approval". 32c6442's message said Toss
+ * refuses a second confirm; that is NOT verified. Toss's API error table lists
+ * `ALREADY_PROCESSED_PAYMENT` (400) under 결제 승인 without saying when it is returned, and a
+ * confirm repeated with the same `Idempotency-Key` gets its first response (`DONE`) back — so
+ * neither spine relies on it, and a KR answer that leans on that refusal alone still scores YES
+ * here. Read such a pass as weaker than it looks.
  *
  * WHICH CORPUS A RUN MEASURES: the installed one (CLAUDE.md §2.8). The published CLI ignores
  * `variants`, so until a variant-aware CLI is on npm every run measures the Stripe default whatever

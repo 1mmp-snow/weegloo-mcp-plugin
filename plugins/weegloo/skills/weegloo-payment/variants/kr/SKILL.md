@@ -265,6 +265,14 @@ amount comparison, same write-back:
 { "type": "If", "condition": { "==": [ "{ /order }", null ] },
   "then": [ { "type": "Return", "isError": true, "statusCode": 404, "value": "unknown order" } ] },
 
+// a search reads the indexed copy, which need not hold this Script's patch — read the row by id
+{ "type": "ResourceRead", "name": "current", "resource": "Content",
+  "target": { "sys": { "id": "{ /order/sys/id }" } } },
+
+// confirmed before — paid, or a 가상계좌 awaiting its deposit: never send Toss a second confirm
+{ "type": "If", "condition": { "!==": [ "{ /current/fields/status/en-US }", "pending" ] },
+  "then": [ { "type": "Return", "value": { "status": "{ /current/fields/status/en-US }" } } ] },
+
 { "type": "Http", "name": "confirmed", "method": "POST",
   "url": "https://api.tosspayments.com/v1/payments/confirm",
   "headers": [
@@ -279,9 +287,14 @@ amount comparison, same write-back:
   "condition": { "and": [
       { "===": [ "{ /confirmed/body/status }", "DONE" ] },
       { "===": [ "{ /confirmed/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
-  "then": [ { "type": "ResourcePatch", "resource": "Content",
-              "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
-              "fields": { "status": "paid", "paymentKey": "{ /payload/paymentKey }" } } ],
+  "then": [ { "type": "Try",
+              "body": [ { "type": "ResourcePatch", "resource": "Content",
+                          "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
+                          "version": "{ /current/sys/version }",
+                          "fields": { "status": "paid",
+                                      "paymentKey": "{ /payload/paymentKey }" } } ],
+              "catch": [ { "type": "Return", "isError": true, "statusCode": 409,
+                           "value": "retry" } ] } ],
   "else": [ { "type": "Return", "isError": true, "statusCode": 402, "value": "payment not confirmed" } ] }
 ```
 
@@ -295,12 +308,36 @@ amount comparison, same write-back:
   The literal above is exactly `base64("test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6:")` — recompute it if
   you use a different key.
 - **Store `paymentKey` and `orderId`** on the order; they are what later lookup and cancellation need.
+- **Grant once.** A rerun — a reloaded success page, a retried call — must not pass the check a
+  second time, and nothing documented makes Toss stop it: its error table lists
+  `ALREADY_PROCESSED_PAYMENT` under 결제 승인 without saying when it is returned, and a confirm
+  repeated with the same `Idempotency-Key` (Toss's quick reference puts one on the confirm) gets
+  its first response back — `DONE` again. Hence the `ResourceRead` by id — the find reads the
+  indexed copy, which need not hold this Script's patch; `ResourceRead` never uses the index — and
+  the early `Return` for an order no longer `pending`, before the confirm is re-sent. If Toss
+  answers a concurrent second call `DONE` as well, the `version` lock sends it to the `catch`
+  (`409`; called again, it answers `status: "paid"`) instead of granting twice.
+- **That early `Return` skips the grant too**, so a grant that fails after the patch is never
+  retried. Put the grant after the `Try`, in a `Try` of its own whose `catch` patches `status` back
+  to `pending` and returns an error, so the next call passes the guard again. Keep the grant one
+  write, or key it on the order, so a rerun cannot duplicate part of it. Never revert in the
+  patch's `catch`: that call lost the race, and would undo the winner's `paid`.
+- **That next call must not re-send the confirm.** The payment is already approved, and no Toss
+  page says what a second confirm of it answers; Toss's quick reference has a failed confirm
+  checked with 결제 조회 before it is treated as failed, because it may already be approved. Such
+  an order is a `pending` one that already holds a `paymentKey` — only a patch that moves the
+  order off `pending` stores one. So before the confirm, add an `If` on
+  `{ /current/fields/paymentKey/en-US }` whose `then` asks 결제 조회 with the same `Basic …` header —
+  `GET https://api.tosspayments.com/v1/payments/{ /current/fields/paymentKey/en-US }` — patches
+  and grants as above only when it answers `DONE` with the order's `orderId` and amount, and ends
+  in a `Return`.
 - **A 가상계좌 confirm succeeds without paying.** The documentation keys never reach this branch
   (they offer no 가상계좌), but build it anyway, so that §6 stays a key swap. It answers
   `status: "WAITING_FOR_DEPOSIT"`, not `DONE` — the account was issued and nothing was deposited.
-  So replace the `else` above with one that takes this case first: after the same amount comparison, patch `status: "awaiting_deposit"`
-  **and `paymentKey`** (the deposit receiver asks Toss about the payment by it — the notification
-  carries none), `Return` only what the buyer deposits into, and answer `402` otherwise:
+  So replace the `else` above with one that takes this case first: after the same amount
+  comparison, patch `status: "awaiting_deposit"` **and `paymentKey`** (the deposit receiver asks
+  Toss about the payment by it — the notification carries none) under the same `version` lock,
+  `Return` only what the buyer deposits into, and answer `402` otherwise:
 
   ```jsonc
   "else": [ { "type": "If",
@@ -308,9 +345,14 @@ amount comparison, same write-back:
           { "===": [ "{ /confirmed/body/status }", "WAITING_FOR_DEPOSIT" ] },
           { "===": [ "{ /confirmed/body/totalAmount }", "{ /order/fields/amount/en-US }" ] } ] },
       "then": [
-        { "type": "ResourcePatch", "resource": "Content",
-          "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
-          "fields": { "status": "awaiting_deposit", "paymentKey": "{ /payload/paymentKey }" } },
+        { "type": "Try",
+          "body": [ { "type": "ResourcePatch", "resource": "Content",
+                      "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
+                      "version": "{ /current/sys/version }",
+                      "fields": { "status": "awaiting_deposit",
+                                  "paymentKey": "{ /payload/paymentKey }" } } ],
+          "catch": [ { "type": "Return", "isError": true, "statusCode": 409,
+                       "value": "retry" } ] },
         { "type": "Return", "value": {
             "bankCode": "{ /confirmed/body/virtualAccount/bankCode }",
             "accountNumber": "{ /confirmed/body/virtualAccount/accountNumber }",
@@ -321,7 +363,10 @@ amount comparison, same write-back:
   ```
 
   `bankCode` is Toss's two-digit bank code, not a bank name. Mark the order paid only from the
-  deposit notification (shape B).
+  deposit notification (shape B). A rerun on this order answers only its `status` (the guard
+  above) and never re-sends the confirm, so the account goes out once, from this `Return`; if a
+  reload must show it again, store those three fields in this patch (`RichText`, like any Toss
+  value) and return them from the guard — never the `secret`.
 - ⚠️ **Never store the confirm response's `secret`, and never `Return` `{ /confirmed/body }`, which
   carries it.** Toss's docs verify the deposit notification against a stored copy of that value —
   the one step of theirs not to follow here. Whoever holds it can post a `DONE` for an order nobody

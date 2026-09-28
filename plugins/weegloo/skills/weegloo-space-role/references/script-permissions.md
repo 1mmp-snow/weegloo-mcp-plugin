@@ -83,8 +83,8 @@ Script. Full patterns: **`weegloo-script`**.
 
 > **Deleted as duplicate:** the save-time *author gate* blockquote (the author's role needs an
 > unconditional `Allow` per action, `WGL403015`, the Content-`Create` exception, `ResourceCount`)
-> is owned by `plugins/weegloo/skills/weegloo-script/SKILL.md:291` (*Author gate*) and summarised
-> by the always-loaded rule `plugins/weegloo/rules/weegloo-api-endpoints.mdc:45`.
+> is owned by `weegloo-script` → `SKILL.md` (*Secrets & auth* → *Author gate*) and summarised by
+> the always-loaded rule `weegloo-api-endpoints` (*SpaceRole & ServiceUserRole*).
 
 ---
 
