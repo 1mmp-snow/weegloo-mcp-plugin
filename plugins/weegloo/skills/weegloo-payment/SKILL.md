@@ -332,6 +332,13 @@ This is **shape A**, and on Stripe it is a plain `GET` with no body:
 { "type": "If", "condition": { "==": [ "{ /order }", null ] },
   "then": [ { "type": "Return", "isError": true, "statusCode": 404, "value": "unknown order" } ] },
 
+// a search reads the indexed copy, which need not hold the `paid` patch — read the row by id
+{ "type": "ResourceRead", "name": "current", "resource": "Content",
+  "target": { "sys": { "id": "{ /order/sys/id }" } } },
+
+{ "type": "If", "condition": { "===": [ "{ /current/fields/status/en-US }", "paid" ] },
+  "then": [ { "type": "Return", "value": "already paid" } ] },
+
 { "type": "Http", "name": "paid", "method": "GET",
   "url": "https://api.stripe.com/v1/checkout/sessions/{ /order/fields/stripeSessionId/en-US }",
   "headers": [ { "key": "Authorization", "value": "Bearer sk_test_BQokikJOvBiI2HlWgH4olfQ2", "secret": true } ],
@@ -341,10 +348,14 @@ This is **shape A**, and on Stripe it is a plain `GET` with no body:
   "condition": { "and": [
       { "===": [ "{ /paid/body/payment_status }", "paid" ] },
       { "===": [ "{ /paid/body/amount_total }", "{ /order/fields/amountMinor/en-US }" ] } ] },
-  "then": [ { "type": "ResourcePatch", "resource": "Content",
-              "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
-              "fields": { "status": "paid",
-                          "paymentIntentId": "{ /paid/body/payment_intent }" } } ],
+  "then": [ { "type": "Try",
+              "body": [ { "type": "ResourcePatch", "resource": "Content",
+                          "target": { "sys": { "id": "{ /order/sys/id }" } }, "locale": "en-US",
+                          "version": "{ /current/sys/version }",
+                          "fields": { "status": "paid",
+                                      "paymentIntentId": "{ /paid/body/payment_intent }" } } ],
+              "catch": [ { "type": "Return", "isError": true, "statusCode": 409,
+                           "value": "retry" } ] } ],
   "else": [ { "type": "Return", "isError": true, "statusCode": 402,
               "value": "payment not confirmed" } ] }
 ```
@@ -355,6 +366,17 @@ This is **shape A**, and on Stripe it is a plain `GET` with no body:
 - **Check `payment_status`, not `status`.** `status: "complete"` means the session finished;
   `payment_status: "paid"` means the money moved. For a delayed-settlement method they differ.
 - **Store `payment_intent`** — it is what a later refund or lookup needs.
+- **Grant once.** The verify `GET` consumes nothing, so a replayed call passes the check again and
+  would re-run whatever you grant after the patch. Hence the `ResourceRead` by id — a search reads
+  the indexed copy, which need not hold the `paid` patch; `ResourceRead` never uses the index — and
+  the early `Return` for an order that already reads paid, before any `Http`. The `version` lock
+  sends a concurrent second call to the `catch` (`409`; called again, it answers `already paid`)
+  instead of granting twice.
+- **That early `Return` skips the grant too**, so a grant that fails after the patch is never
+  retried. Put the grant after the `Try`, in a `Try` of its own whose `catch` patches `status` back
+  to `pending` and returns an error — the next call then verifies and grants again. Keep the grant
+  one write, or key it on the order, so a rerun cannot duplicate part of it. Never revert in the
+  patch's `catch`: that call lost the race, and would undo the winner's `paid`.
 - **Guest checkout** has no caller to resolve `:self` against — drop the `createdBy` filter and match
   on `orderId` alone, which then has to be long and random rather than sequential (§6a's
   `crypto.randomUUID()` is). The `SpaceAccessToken` a guest calls with gets `script.Execute` on the
@@ -440,8 +462,9 @@ credentials list. **Never let a test-mode checkout pass for production-ready by 
 | Use for | checkout approval, "did this payment really go through" | refunds, disputes, subscription renewals, delayed settlement, anything you cannot pull |
 
 **Prefer A whenever the answer can be pulled.** It needs no signature verification, no inbound
-authentication, and no idempotency key — you are asking the authoritative source directly. §6c is A,
-and the whole Stripe-test-mode default path is A — it is complete above, in this file.
+authentication, and no idempotency key — you are asking the authoritative source directly, though
+granting only once is still yours (*A. Confirm* step 5). §6c is A, and the whole Stripe-test-mode
+default path is A — it is complete above, in this file.
 
 **Add B when the money can move without your frontend being there** — a subscription renewal, a
 dispute, an async payment method that settles minutes later. A buyer who closes the tab before the
@@ -469,7 +492,11 @@ redirect is the ordinary case B covers.
 3. `Http` GET/POST to the PG's verify endpoint, secret key in a header with **`"secret": true`**.
 4. **Compare** the PG's reported amount + currency + order id against step 2. Mismatch ⇒ `Return`
    with `isError: true` and do not fulfil.
-5. `ResourcePatch` the order → paid, and only then grant the entitlement.
+5. `ResourcePatch` the order → paid, and only then grant the entitlement — **once**: a verify call
+   that consumes nothing passes again when replayed, so re-read the order by id (a search reads the
+   indexed copy, which need not hold the patch), skip it if it already reads paid, and patch with
+   that read's `sys.version` as `version`, so a concurrent second call fails instead of granting
+   twice. If the grant then fails, patch the order back to unpaid so the next call grants again.
 
 - **Send or compare the amount you recorded, not the amount the caller sent** — and an order row the
   caller wrote *is* the amount the caller sent. A verify call that the provider itself amount-checks

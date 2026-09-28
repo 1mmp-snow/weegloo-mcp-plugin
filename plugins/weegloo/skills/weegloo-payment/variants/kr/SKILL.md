@@ -410,8 +410,9 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
 | Use for | checkout approval, "did this payment really go through" | refunds, disputes, subscription renewals, virtual-account deposits, anything you cannot pull |
 
 **Prefer A whenever the answer can be pulled.** It needs no signature verification, no inbound
-authentication, and no idempotency key — you are asking the authoritative source directly. §4 is A,
-and the Toss test-key default path is A, complete above in this file.
+authentication, and no idempotency key — you are asking the authoritative source directly, though
+granting only once is still yours (*A. Confirm* step 5). §4 is A, and the Toss test-key default path
+is A, complete above in this file.
 
 **Add B when the money can move without your frontend being there** — a 가상계좌 deposit that lands
 hours later, a subscription renewal, a dispute. Card checkout stays A. **The Toss 가상계좌 deposit is
@@ -438,7 +439,11 @@ as a trigger only and asks Toss's 결제 조회 API before it writes — the one
 3. `Http` GET/POST to the PG's verify endpoint, secret key in a header with **`"secret": true`**.
 4. **Compare** the PG's reported amount + currency + order id against step 2. Mismatch ⇒ `Return`
    with `isError: true` and do not fulfil.
-5. `ResourcePatch` the order → paid, and only then grant the entitlement.
+5. `ResourcePatch` the order → paid, and only then grant the entitlement — **once**: a verify call
+   that consumes nothing passes again when replayed, so re-read the order by id (a search reads the
+   indexed copy, which need not hold the patch), skip it if it already reads paid, and patch with
+   that read's `sys.version` as `version`, so a concurrent second call fails instead of granting
+   twice. If the grant then fails, patch the order back to unpaid so the next call grants again.
 
 - **Send or compare the amount you recorded, not the amount the caller sent.** A verify call that the
   provider itself amount-checks only protects you if the amount you sent came from your own record,
