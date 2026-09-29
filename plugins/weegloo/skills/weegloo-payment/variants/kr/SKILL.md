@@ -27,7 +27,7 @@ rule that bans capability menus in `weegloo-platform-integration` (step 3) bans 
 
 | What the user gave you | What you integrate |
 |---|---|
-| A named provider — Toss Payments, PortOne, NICEPAY, KG이니시스, Stripe, Paddle, Lemon Squeezy, … — or a contracted key already sitting in the repo / env | **That** provider. Read **its** docs for shape, signature scheme and callback-header support. |
+| A named provider — Toss Payments, PortOne, NICEPAY, KG이니시스, Stripe, Paddle, Lemon Squeezy, … — or a contracted key already sitting in the repo / env | **That** provider. Toss → this file. **Stripe → `references/stripe.md`**, the whole integration. Any other → read **its** docs for shape, signature scheme and callback-header support. |
 | Nothing — no provider named anywhere | **Toss Payments on documentation test keys**, silently, per *Default provider* below — then **disclose it** (§5, mandatory). |
 
 A payment need you inferred from the frontend (a checkout page, a `결제하기` / "Pay" button, a price, a
@@ -35,9 +35,13 @@ cart, a plan picker) means **the user asked for payments**. It does **not** mean
 — that is exactly the case the default is for.
 
 **A named provider is binding — the Toss default does not apply to it, and is never a fallback.**
-Two follow-on cases, if they named one but sent no credentials:
+Three follow-on cases, if they named one but sent no credentials:
 
-- **They named a provider other than Toss** (PortOne, NICEPAY, Stripe, …) → its key **is** a genuine
+- **They named Stripe** — in the design, in the prompt, or as a `pk_test_…` / `sk_test_…` already in
+  the repo → **read `references/stripe.md` and build from it, entirely.** It is the whole Stripe
+  integration — its published sample key pair, ContentTypes, Scripts, checkout page, disclosure,
+  go-live — so there is **nothing to ask for**, and the Toss sections below do not apply to it.
+- **They named a provider other than Toss or Stripe** (PortOne, NICEPAY, …) → its key **is** a genuine
   blocking input under `weegloo-platform-integration` step 4. Build everything that does not need it,
   then **stop and ask for that provider's credentials**. Do **not** substitute Toss because the keys
   have not arrived, and do **not** wire both "for now" — a provider the user did not choose is wrong
@@ -45,6 +49,11 @@ Two follow-on cases, if they named one but sent no credentials:
 - **They named Toss Payments itself** → use the documentation test keys below exactly as the default
   path does, and §5's disclosure **still applies**: it discloses *test keys / nothing charged*, which
   is true here too. Only the "why Toss" half of the disclosure drops, since they picked it.
+
+> ### ➜ Stripe named? Read `references/stripe.md` and build from it — skip the Toss sections below.
+> It carries Stripe's published sample key pair, so a named Stripe with no keys sent is still not a
+> key request — wire the sample pair, disclose test mode, and mention their own keys only as an
+> optional last line.
 
 ---
 
@@ -457,7 +466,8 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
 **A different provider** is a replacement, not a layer:
 
 1. **Read that provider's docs first** — shape, signature scheme, callback-header support (§*Two
-   shapes*; if it pushes, `references/callback-receiver.md`). Do not assume it behaves like Toss.
+   shapes*; if it pushes, `references/callback-receiver.md`; Stripe: `references/stripe.md`, all of
+   it). Do not assume it behaves like Toss.
 2. **Remove the Toss integration entirely**: the SDK script tag / package, the widget render and
    `requestPayment` code, Toss-specific `successUrl` / `failUrl` handling, the confirm Script's two
    Toss `Http` statements and their `Basic …` header — and the 가상계좌 deposit receiver Script, which
@@ -548,7 +558,8 @@ compromised if an end-user role can already read it.
 
 - **Never ask which PG / MoR to use.** Named provider → integrate that one; none named → integrate
   the Toss Payments test-key default and disclose it. A provider menu is a scoping question.
-- **Never ask the user for Toss keys** — the documentation pair in §2 is what you wire in (the one
+- **Never ask the user for Toss keys, or for Stripe keys** — the documentation pair in §2 (Toss) and
+  the published sample pair in `references/stripe.md` §1 (Stripe) are what you wire in (the one
   exception: those keys are gone, §1). And never ship an inert checkout waiting on a key.
 - **Never finish a test-key payment flow silently.** The completion message must say that payments run
   on Toss test keys and are not really charged (§5) — as a statement, not a request for credentials.
