@@ -209,11 +209,55 @@ orders 에는 \`createdBy :self\` 로 좁힌 \`Read\` 만, products 에는 \`Rea
   },
 ];
 
+// One sample per failure mode of 28: Stripe built on a KR install (disclosed, so only `no-stripe`
+// may reject it), and the Toss default built right but shipped without the test-key disclosure.
+const KR_DEFAULT_WRONG_ANSWERS = [
+  {
+    id: 'stripe-on-kr',
+    violates: ['no-stripe'],
+    // The reported defect: no provider named, Stripe built anyway. Toss is mentioned, but only as
+    // a later option, so a regex on "토스" alone would pass it.
+    text: `결제는 Stripe 테스트 모드로 붙이겠습니다. 결제 서비스를 지정하지 않으셔서, 키 없이 바로
+동작하는 Stripe 공개 샘플 키(\`pk_test_TYooMQauvdEDq54NiTphI7jx\` / \`sk_test_BQokikJOvBiI2HlWgH4olfQ2\`)를 씁니다.
+
+## 흐름
+1. '구매하기' 버튼은 상품 id 와 수량만 주문 Script 에 보냅니다. Script 가 product 행의 가격으로
+   금액을 계산해 주문을 \`pending\` 으로 만들고, Stripe Checkout Session 을 생성해 그 URL 을 돌려줍니다.
+2. 브라우저는 Stripe 호스티드 결제 페이지로 이동합니다. 테스트 카드 \`4242 4242 4242 4242\` 를 화면에 안내합니다.
+3. 성공 페이지가 confirm Script 를 부르고, Script 가 Stripe API 로 세션을 조회해 \`payment_status: paid\` 와
+   금액이 주문 행과 같을 때만 \`paid\` 로 바꿉니다.
+
+나중에 국내 결제가 필요하면 토스페이먼츠로 바꿀 수 있습니다.
+
+\`\`\`diff
+- 결제는 Stripe 테스트 키로 동작합니다 — 실제로 청구되는 카드는 없습니다.
+\`\`\``,
+  },
+  {
+    id: 'toss-undisclosed',
+    violates: ['test-keys-disclosed'],
+    // Right provider, right flow, and nothing saying the keys are test keys or that no card is
+    // charged — the checkout reads as production-ready.
+    text: `결제는 토스페이먼츠 결제위젯(주문서형 결제)으로 붙이겠습니다.
+
+## 흐름
+1. 상품 상세 페이지에 결제위젯을 렌더링합니다(\`renderPaymentMethods\`, \`renderAgreement\`).
+2. '구매하기'를 누르면 주문 Script 가 product 행의 가격으로 금액을 계산해 주문을 \`pending\` 으로 만들고,
+   그 금액으로 \`requestPayment\` 를 호출합니다.
+3. 성공 페이지가 confirm Script 를 즉시 부릅니다. Script 는 토스 승인 API 를 호출한 뒤 결제 조회 API 로
+   \`DONE\` 과 금액·주문번호가 주문 행과 같은지 확인하고 \`paid\` 로 바꿉니다.
+4. 시크릿 키는 Script 의 \`Http.headers\` 에 \`secret: true\` 로만 넣고, 브라우저에는 클라이언트 키만 둡니다.
+
+배포하면 바로 카드 결제를 받을 수 있습니다.`,
+  },
+];
+
 // Controlled fixture file → its wrong answers. A fixture joins by adding a line here; its judge
 // questions are read from the fixture itself.
 const CONTROLS = {
   '08-space-teardown.mjs': TEARDOWN_WRONG_ANSWERS,
   '26-payment-amount-grant-once.mjs': PAYMENT_WRONG_ANSWERS,
+  '28-payment-default-kr-toss.mjs': KR_DEFAULT_WRONG_ANSWERS,
 };
 
 function agent(prompt) {

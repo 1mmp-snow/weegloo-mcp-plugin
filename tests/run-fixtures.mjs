@@ -28,6 +28,14 @@
  *   0  all fixtures met their asserts, or (with --compare) nothing regressed
  *   1  a regression vs the baseline, or a failure with no baseline to compare against
  *   2  harness error (bad fixture, agent command missing, etc.)
+ *
+ * COUNTRY-GATED FIXTURES
+ *   A fixture may set `country: ['KR']`. The installer installs a skill's country variant
+ *   (CLAUDE.md §2.8), so one ref installs different text in KR and elsewhere. Such a fixture
+ *   runs only when the installed corpus was recorded for one of those countries
+ *   (`~/.weegloo/claude/installed.json` → `country`). Anywhere else, or when the country is
+ *   unknown, it is SKIPPED: listed as skipped, never scored, and with --compare its baseline
+ *   asserts stay UNVERIFIED.
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -100,6 +108,10 @@ async function loadFixtures(only) {
       if (!fx[key]) throw new Error(`${file}: missing '${key}'`);
     }
     if (!Array.isArray(fx.asserts) || fx.asserts.length === 0) throw new Error(`${file}: 'asserts' must be a non-empty array`);
+    if (fx.country !== undefined
+        && !(Array.isArray(fx.country) && fx.country.length && fx.country.every((c) => /^[A-Z]{2}$/.test(c)))) {
+      throw new Error(`${file}: 'country' must be a non-empty array of uppercase ISO 3166-1 alpha-2 codes`);
+    }
     for (const a of fx.asserts) {
       if (!a.id || !a.kind || !a.why) throw new Error(`${file}: assert needs id/kind/why`);
       if (!['must_match', 'must_not_match', 'judge'].includes(a.kind)) throw new Error(`${file}: bad assert kind '${a.kind}'`);
@@ -161,6 +173,15 @@ function corpusProvenance() {
     }
   } catch { /* the stamp is a convenience, never a requirement */ }
 
+  // WHICH COUNTRY'S CORPUS. The installer picks each skill's country variant (CLAUDE.md §2.8), so
+  // one ref installs different text in KR and elsewhere. The install record keeps the country it
+  // filtered for; a fixture with `country` runs only against a matching install.
+  let installedCountry = null;
+  try {
+    const rec = path.join(process.env.USERPROFILE || process.env.HOME || '', '.weegloo', 'claude', 'installed.json');
+    if (existsSync(rec)) installedCountry = JSON.parse(readFileSync(rec, 'utf-8')).country ?? null;
+  } catch { /* unknown country: country-gated fixtures are skipped, never guessed */ }
+
   // WHICH ACCOUNT ANSWERED. The corpus is not the only thing that can differ between two
   // scorecards: `claude -p` resolves its model and its rate limits from the organization its
   // OAuth login is bound to, and that binding lives outside this repo. A run taken under a
@@ -182,6 +203,7 @@ function corpusProvenance() {
     agentOrg,
     agentModel: process.env.ANTHROPIC_MODEL ?? null,
     installedVersion: installed?.version ?? null,
+    installedCountry,
     ruleBytes: bytes('plugins/weegloo/rules', (n) => n.endsWith('.mdc')),
     skillBytes: bytes('plugins/weegloo/skills', (n) => n.endsWith('.md')),
   };
@@ -271,21 +293,39 @@ async function mapLimit(items, limit, fn) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  if (args.help) { console.log(readFileSync(new URL(import.meta.url)).toString().split('\n').slice(1, 32).join('\n')); return 0; }
+  if (args.help) {
+    const lines = readFileSync(new URL(import.meta.url)).toString().split('\n');
+    console.log(lines.slice(1, lines.indexOf(' */')).join('\n'));
+    return 0;
+  }
 
-  const fixtures = await loadFixtures(args.only);
+  const loaded = await loadFixtures(args.only);
   const provenance = corpusProvenance();
+
+  // A country-gated fixture measures one installed variant. Against any other install, or an
+  // unknown country, it is not run — and it is LISTED as skipped, so a run that measured none of
+  // it never reads as one that passed it.
+  const gatedOut = (fx) => fx.country && !fx.country.includes(provenance.installedCountry);
+  const fixtures = loaded.filter((fx) => !gatedOut(fx));
+  const skipped = loaded.filter(gatedOut).map((fx) => ({ id: fx.id, country: fx.country }));
+  const printSkipped = () => {
+    for (const s of skipped) {
+      console.log(`  SKIP  ${s.id}  — runs on a ${s.country.join('/')} install only; installed country: ${provenance.installedCountry ?? 'unknown'}`);
+    }
+  };
 
   if (args.dryRun) {
     console.log(`${fixtures.length} fixtures, ${fixtures.reduce((s, f) => s + f.asserts.length, 0)} asserts`);
     for (const f of fixtures) console.log(`  [${f.lang}] ${f.id}  (${f.asserts.length} asserts)  ${f.__file}`);
-    console.log(`\ncorpus: ${provenance.gitRef}@${provenance.gitSha}${provenance.gitDirty ? ' (dirty)' : ''}  rules=${provenance.ruleBytes}B skills=${provenance.skillBytes}B`);
+    printSkipped();
+    console.log(`\ncorpus: ${provenance.gitRef}@${provenance.gitSha}${provenance.gitDirty ? ' (dirty)' : ''}  rules=${provenance.ruleBytes}B skills=${provenance.skillBytes}B  country=${provenance.installedCountry ?? 'unknown'}`);
     return 0;
   }
 
   const agentCmd = (args.agentCmd || process.env.WEEGLOO_FIXTURE_AGENT_CMD || 'claude -p').split(' ').filter(Boolean);
   console.log(`agent: ${agentCmd.join(' ')}`);
-  console.log(`corpus: ${provenance.gitRef}@${provenance.gitSha}${provenance.gitDirty ? ' (dirty)' : ''}`);
+  console.log(`corpus: ${provenance.gitRef}@${provenance.gitSha}${provenance.gitDirty ? ' (dirty)' : ''}  country=${provenance.installedCountry ?? 'unknown'}`);
+  printSkipped();
   console.log(`running ${fixtures.length} fixtures (concurrency ${args.concurrency})...\n`);
 
   const results = await mapLimit(fixtures, args.concurrency, async (fx) => {
@@ -332,7 +372,7 @@ async function main() {
 
   const totalAsserts = merged.reduce((s, r) => s + r.total, 0);
   const totalPassed = merged.reduce((s, r) => s + r.passed, 0);
-  const scorecard = { provenance, agentCmd: agentCmd.join(' '), totals: { fixtures: merged.length, asserts: totalAsserts, passed: totalPassed }, results: merged };
+  const scorecard = { provenance, agentCmd: agentCmd.join(' '), totals: { fixtures: merged.length, asserts: totalAsserts, passed: totalPassed }, results: merged, skipped };
 
   console.log(`\n${totalPassed}/${totalAsserts} asserts passed across ${merged.length} fixtures`);
 
@@ -456,6 +496,11 @@ async function main() {
       if (errored.length) {
         console.error(`\n  cause — ${errored.length} fixture(s) errored:`);
         for (const r of errored) console.error(`    ${r.id}: ${r.error}`);
+      }
+      const skippedHere = skipped.filter((s) => unverified.some((k) => k.startsWith(`${s.id}::`)));
+      if (skippedHere.length) {
+        console.error(`\n  cause — ${skippedHere.length} fixture(s) skipped for this install's country (${provenance.installedCountry ?? 'unknown'}):`);
+        for (const s of skippedHere) console.error(`    ${s.id}: needs a ${s.country.join('/')} install`);
       }
       console.error('\n  This run cannot support a "no regression" claim. Re-run the missing fixtures.');
     }

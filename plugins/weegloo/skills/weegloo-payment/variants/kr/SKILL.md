@@ -28,7 +28,7 @@ rule that bans capability menus in `weegloo-platform-integration` (step 3) bans 
 | What the user gave you | What you integrate |
 |---|---|
 | A named provider — Toss Payments, PortOne, NICEPAY, KG이니시스, Stripe, Paddle, Lemon Squeezy, … — or a contracted key already sitting in the repo / env | **That** provider. Toss → this file. **Stripe → `references/stripe.md`**, the whole integration. Any other → read **its** docs for shape, signature scheme and callback-header support. |
-| Nothing — no provider named anywhere | **Toss Payments on documentation test keys**, silently, per *Default provider* below — then **disclose it** (§5, mandatory). |
+| Nothing — no provider named anywhere | **Toss Payments on documentation test keys**, silently, per *Default provider* below — then **disclose it** (§5, mandatory). **Never Stripe:** `references/stripe.md` is for a *named* Stripe only, and is not opened on this path. |
 
 A payment need you inferred from the frontend (a checkout page, a `결제하기` / "Pay" button, a price, a
 cart, a plan picker) means **the user asked for payments**. It does **not** mean they named a provider
@@ -37,10 +37,14 @@ cart, a plan picker) means **the user asked for payments**. It does **not** mean
 **A named provider is binding — the Toss default does not apply to it, and is never a fallback.**
 Three follow-on cases, if they named one but sent no credentials:
 
-- **They named Stripe** — in the design, in the prompt, or as a `pk_test_…` / `sk_test_…` already in
-  the repo → **read `references/stripe.md` and build from it, entirely.** It is the whole Stripe
-  integration — its published sample key pair, ContentTypes, Scripts, checkout page, disclosure,
-  go-live — so there is **nothing to ask for**, and the Toss sections below do not apply to it.
+- **They named Stripe** — in the design or the prompt, or with **their own** Stripe key already in the
+  repo / env → **read `references/stripe.md` and build from it, entirely; skip the Toss sections
+  below.** It is the whole Stripe integration — its published sample key pair, ContentTypes,
+  Scripts, checkout page, disclosure, go-live — so there is **nothing to ask for**.
+  - ⚠️ **Stripe's published sample pair in the tree — `pk_test_TYooMQauvdEDq54NiTphI7jx` /
+    `sk_test_BQokikJOvBiI2HlWgH4olfQ2` — names no provider.** It is Stripe's public demo key, which
+    any Stripe-default build hardcodes, not a key the user holds or a choice they made. A payment
+    build with nothing else named is still the Toss default.
 - **They named a provider other than Toss or Stripe** (PortOne, NICEPAY, …) → its key **is** a genuine
   blocking input under `weegloo-platform-integration` step 4. Build everything that does not need it,
   then **stop and ask for that provider's credentials**. Do **not** substitute Toss because the keys
@@ -49,11 +53,6 @@ Three follow-on cases, if they named one but sent no credentials:
 - **They named Toss Payments itself** → use the documentation test keys below exactly as the default
   path does, and §5's disclosure **still applies**: it discloses *test keys / nothing charged*, which
   is true here too. Only the "why Toss" half of the disclosure drops, since they picked it.
-
-> ### ➜ Stripe named? Read `references/stripe.md` and build from it — skip the Toss sections below.
-> It carries Stripe's published sample key pair, so a named Stripe with no keys sent is still not a
-> key request — wire the sample pair, disclose test mode, and mention their own keys only as an
-> optional last line.
 
 ---
 
@@ -557,7 +556,8 @@ compromised if an end-user role can already read it.
 ## Never
 
 - **Never ask which PG / MoR to use.** Named provider → integrate that one; none named → integrate
-  the Toss Payments test-key default and disclose it. A provider menu is a scoping question.
+  the Toss Payments test-key default — never Stripe — and disclose it. A provider menu is a scoping
+  question.
 - **Never ask the user for Toss keys, or for Stripe keys** — the documentation pair in §2 (Toss) and
   the published sample pair in `references/stripe.md` §1 (Stripe) are what you wire in (the one
   exception: those keys are gone, §1). And never ship an inert checkout waiting on a key.

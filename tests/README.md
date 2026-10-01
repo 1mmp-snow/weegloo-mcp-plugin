@@ -30,6 +30,10 @@ somewhere else.
 - Each fixture is a `.mjs` module (regex literals, no escaping pain) with
   `{id, lang, prompt, asserts:[{id, kind, pattern, why}]}`. `kind` is `must_match` or
   `must_not_match`.
+- A fixture may set `country: ['KR']` when it measures one country's installed variant
+  (CLAUDE.md §2.8). It runs only when `~/.weegloo/claude/installed.json` records one of those
+  countries. Otherwise it is printed as `SKIP` and stored under `skipped` in the scorecard, never
+  scored, and under `--compare` its baseline asserts are UNVERIFIED rather than passed.
 - Every assert carries a `why` that states **what breaks in production if this regresses**.
   An assert without a failure story is noise and should be deleted.
 - The scorecard records the git ref, sha, dirty flag and corpus byte totals. A score with no

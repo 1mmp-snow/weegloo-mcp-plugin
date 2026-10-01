@@ -6,6 +6,11 @@ lands here, this file is the entire Stripe integration — keys, ContentTypes, S
 page, disclosure, go-live — and the Toss Payments sections of `SKILL.md` are not used alongside
 it. Section numbers (§1 … §8) below refer to this file.
 
+> **Nobody named Stripe? Stop — this is the wrong file.** A payment request that names no provider is
+> the **Toss Payments** default in `SKILL.md`. Stripe is never this version's default or its fallback,
+> and Stripe's published sample pair (§1) sitting in the tree names no provider. This file is the
+> named-Stripe path only.
+
 **This is about the product charging its own customers**, using Weegloo as the backend. Weegloo's own
 subscription and plan billing is a different thing entirely and is not configured from here.
 
@@ -60,7 +65,7 @@ publishable key at all — it exists here only for Stripe.js / Elements.
 - **Shape B (webhook receiver) cannot run on it** — registering an endpoint and getting a
   `whsec_…` requires dashboard access to an account you own. Build **shape A** (§6c) on the sample
   keys; a webhook receiver waits for the user's own account (§8). It is not something you stop and
-  ask for. **So the default path never reads `references/stripe-callback-receiver.md`.**
+  ask for. **So this path never reads `references/stripe-callback-receiver.md` on the sample keys.**
 
 ### 2. Read the docs first — they outrank this file
 
@@ -85,7 +90,7 @@ trying nearby paths.
 
 ### 3. What to ask the user for — **nothing**
 
-There is no credential question in the default path: the keys are in §1, `success_url` / `cancel_url`
+There is no credential question on this path: the keys are in §1, `success_url` / `cancel_url`
 resolve from your own deployed origin (§6a), and the product details came with the request. The user
 finds out what shipped from the §7 disclosure, after it works.
 
@@ -297,7 +302,7 @@ every value (`weegloo-script` → `Http`).
   "{ /product/fields/stripePriceId/en-US }"`, with the order recording `"amountMinor":
   "{ /session/body/amount_total }"` — fits a fixed catalogue on the user's **own** Stripe account
   (§8): Stripe owns the price, so it cannot drift from the charge. The §1 sample account holds no
-  Prices of yours, so the default build prices inline from `priceMinor`. Either way it is read from
+  Prices of yours, so a sample-key build prices inline from `priceMinor`. Either way it is read from
   the **product** row — a price or Price id taken from the payload or the order is one the buyer
   picked.
 - **Amounts are in the currency's minor unit.** `1000` = 10 USD; for a **zero-decimal** currency such
@@ -449,8 +454,8 @@ credentials list. **Never let a test-mode checkout pass for production-ready by 
 
 **Prefer A whenever the answer can be pulled.** It needs no signature verification, no inbound
 authentication, and no idempotency key — you are asking the authoritative source directly, though
-granting only once is still yours (*A. Confirm* step 5). §6c is A, and the whole Stripe-test-mode
-default path is A — it is complete above, in this file.
+granting only once is still yours (*A. Confirm* step 5). §6c is A, and the whole Stripe test-mode
+path is A — it is complete above, in this file.
 
 **Add B when the money can move without your frontend being there** — a subscription renewal, a
 dispute, an async payment method that settles minutes later. A buyer who closes the tab before the
@@ -464,7 +469,7 @@ redirect is the ordinary case B covers.
 > both** — if you are not receiving a push from the provider, do not open it.
 >
 > It is also **not reachable on the §1 sample keys** — registering a webhook endpoint needs the
-> user's own Stripe account, so the default build does not go there.
+> user's own Stripe account, so a sample-key build does not go there.
 
 ---
 
