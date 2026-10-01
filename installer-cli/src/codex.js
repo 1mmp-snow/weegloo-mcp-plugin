@@ -170,9 +170,12 @@ export function stripWeeglooMcpSections(toml) {
 }
 
 /**
- * @param {{ weeglooUrl: string, uploadApiUrl: string, token: string, injectPath?: boolean }} config
+ * No token goes into the upload server's env: the agent passes weegloo-upload an upload token
+ * per call, issued through the weegloo server (`cma_IssueUploadToken`).
+ *
+ * @param {{ weeglooUrl: string, uploadApiUrl: string, injectPath?: boolean }} config
  */
-export function buildWeeglooMcpToml({ weeglooUrl, uploadApiUrl, token, injectPath = false }) {
+export function buildWeeglooMcpToml({ weeglooUrl, uploadApiUrl, injectPath = false }) {
   const { command, args, env } = uploadServerCommand({ injectPath });
   return [
     '[mcp_servers.weegloo]',
@@ -185,7 +188,6 @@ export function buildWeeglooMcpToml({ weeglooUrl, uploadApiUrl, token, injectPat
     '[mcp_servers.weegloo-upload.env]',
     ...Object.entries(env).map(([k, v]) => `${k} = ${escapeTomlString(v)}`),
     `UPLOAD_API_URL = ${escapeTomlString(uploadApiUrl)}`,
-    `AUTH_BEARER_TOKEN = ${escapeTomlString(token)}`,
     '',
   ].join('\n');
 }
@@ -290,7 +292,6 @@ export function removeRuleMarkers(mdPath, ids) {
 }
 
 export async function installCodex({
-  token,
   pluginRef,
   version,
   mcpGroup,
@@ -331,7 +332,6 @@ export async function installCodex({
       const merged = mergeCodexConfig(existing, {
         weeglooUrl: buildMcpUrlWithGroup(weeglooUrl, mcpGroup),
         uploadApiUrl,
-        token,
         injectPath: host === 'xcode',
       });
       fs.writeFileSync(configPath, merged, 'utf-8');
@@ -482,7 +482,7 @@ export function printCodexLoginNotice() {
   console.log(chalk.bold.cyan('  └' + line + '┘'));
   console.log();
   console.log(
-    chalk.dim('  weegloo-upload is already configured via your PAT in config.toml.')
+    chalk.dim('  weegloo-upload needs no login: it gets its upload token from weegloo.')
   );
   console.log(
     chalk.dim('  The weegloo HTTP MCP server needs this login step separately.')

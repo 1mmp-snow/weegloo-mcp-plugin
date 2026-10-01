@@ -203,10 +203,36 @@ test('removeMcpServers (toml): strips the weegloo tables and keeps the rest', ()
     const result = removeMcpServers({ kind: 'toml', file });
 
     assert.deepEqual(result.removed, ['weegloo', 'weegloo-upload']);
+    assert.equal(result.removedToken, true, 'the PAT in the upload env is reported');
     const body = fs.readFileSync(file, 'utf-8');
     assert.ok(!body.includes('weegloo'), 'no weegloo table or token left behind');
     assert.ok(body.includes('model = "gpt-5"'));
     assert.ok(body.includes('[projects."/tmp/app"]'), 'the user\'s trust entry survives');
+  });
+});
+
+test('removeMcpServers: removedToken is true only when the removed entries held a PAT', () => {
+  withTmp('weegloo-mcp-token-', (root) => {
+    const json = (servers) => {
+      const file = path.join(root, `mcp-${Math.random().toString(36).slice(2)}.json`);
+      fs.writeFileSync(file, JSON.stringify({ mcpServers: servers }), 'utf-8');
+      return removeMcpServers({ kind: 'json', file, container: 'mcpServers' }).removedToken;
+    };
+    const upload = (env) => ({ command: 'npx', args: ['-y', 'weegloo-upload'], env });
+    // Current OAuth-agent install: no token anywhere.
+    assert.equal(json({ weegloo: { type: 'http', url: 'u' }, 'weegloo-upload': upload({ UPLOAD_API_URL: 'x' }) }), false);
+    // Installs made before the upload token, and Android Studio's upload env.
+    assert.equal(json({ weegloo: { type: 'http', url: 'u' }, 'weegloo-upload': upload({ AUTH_BEARER_TOKEN: 'pat' }) }), true);
+    // Android Studio's remote server header.
+    assert.equal(json({ weegloo: { httpUrl: 'u', headers: { Authorization: 'Bearer pat' } } }), true);
+
+    const file = path.join(root, 'config.toml');
+    fs.writeFileSync(
+      file,
+      ['[mcp_servers.weegloo]', 'url = "u"', '', '[mcp_servers.weegloo-upload.env]', 'UPLOAD_API_URL = "x"', ''].join('\n'),
+      'utf-8'
+    );
+    assert.equal(removeMcpServers({ kind: 'toml', file }).removedToken, false);
   });
 });
 

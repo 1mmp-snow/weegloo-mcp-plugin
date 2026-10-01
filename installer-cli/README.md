@@ -27,7 +27,7 @@ Run with no options for the interactive installer. **Any option below pre-fills 
 | `-l, --location <loc>` | Install location: `project` \| `global` (default: `global`). |
 | `--mcp <group>` | Install the MCP server with group: `default` \| `core` \| `extra` \| `all`. |
 | `--no-mcp` | Do not install the MCP server. |
-| `-t, --token <pat>` | Weegloo Personal Access Token. Also reads `WEEGLOO_TOKEN` (the flag wins). |
+| `-t, --token <pat>` | Weegloo Personal Access Token, **Android Studio only** (its `weegloo` server authenticates with it). Every other agent signs in with OAuth and gives `weegloo-upload` a per-call upload token, so a token given for them is ignored with a warning. Also reads `WEEGLOO_TOKEN` (the flag wins). |
 | `--ignore-skill` | Do not install Skills. |
 | `--ignore-rule` | Do not install Rules. |
 | `--origins <file>` | Origins mapping (JSON file or inline JSON) for a staging or enterprise stack (see [Origins mapping](#origins-mapping-staging--enterprise)). Also reads `WEEGLOO_ORIGINS`. Install only. |
@@ -43,18 +43,21 @@ Run with no options for the interactive installer. **Any option below pre-fills 
 Triggered by `-y` **or** a non-TTY environment (piped, CI, or an agent). In this mode:
 
 - **Defaults:** branch `latest`, MCP + Skills + Rules installed, group `default`, location `global`, all Skills and Rules selected.
-- **Required:** `--agent` is always required, and a token (`--token` or `WEEGLOO_TOKEN`) is required whenever MCP is installed (never for `--update`). Missing required values exit immediately with an error instead of hanging on a prompt.
+- **Required:** `--agent` is always required, and a token (`--token` or `WEEGLOO_TOKEN`) is required only when MCP is installed for Android Studio (never for other agents, `--update` or `--uninstall`). Missing required values exit immediately with an error instead of hanging on a prompt.
 - Conflicting or invalid flags (e.g. `--mcp` together with `--no-mcp`, nothing left to install, or an unknown enum value) also exit with a clear error.
 
 ```bash
-# Fully non-interactive: MCP + Skills + Rules for Claude Code
-WEEGLOO_TOKEN=… npx weegloo@latest -y --agent claude
+# Fully non-interactive: MCP + Skills + Rules for Claude Code (no token needed)
+npx weegloo@latest -y --agent claude
 
-# Skills/Rules only, no MCP (no token needed)
+# Android Studio is the one agent whose MCP needs a Personal Access Token
+WEEGLOO_TOKEN=… npx weegloo@latest -y --agent androidstudio
+
+# Skills/Rules only, no MCP
 npx weegloo@latest -y --agent claude --no-mcp
 
 # Codex running inside Xcode Intelligence (injects PATH so Xcode can spawn npx)
-WEEGLOO_TOKEN=… npx weegloo@latest -y --agent codex --host xcode
+npx weegloo@latest -y --agent codex --host xcode
 
 # Update an existing install (selection preserved; no token needed)
 npx weegloo@latest --agent claude --location global --update
@@ -76,7 +79,6 @@ Selecting **Xcode** in the interactive IDE list (then choosing Claude Code or Co
 [mcp_servers.weegloo-upload.env]
 PATH = "/Users/you/.nvm/versions/node/v18.20.8/bin:/usr/bin:/bin"
 UPLOAD_API_URL = "https://upload.weegloo.com/v1"
-AUTH_BEARER_TOKEN = "…"
 ```
 
 `PATH` (rather than an absolute `command`) is sufficient on its own — it covers both locating `npx` and npx's `#!/usr/bin/env node` shebang. Because the path embeds the node version, **re-run the installer after a node upgrade**. `--host` has no effect on Windows (there `cmd /c npx` already resolves node next to `npx.cmd`) and only applies to `--agent claude`/`codex` (Xcode Intelligence hosts only those).
@@ -134,7 +136,7 @@ npx weegloo@latest -y --agent claude --location global --uninstall
 `--uninstall` is the inverse of an install. It removes:
 
 - the installed **Skills** (directories) and **Rules** (files, or the `<!-- weegloo:… -->` marker sections inside a shared `AGENTS.md` / `GEMINI.md`);
-- the **`weegloo` and `weegloo-upload` MCP server entries** — and with them the Personal Access Token the installer wrote into that config;
+- the **`weegloo` and `weegloo-upload` MCP server entries** — and with them any Personal Access Token the installer wrote into that config (Android Studio, and installs made before `weegloo-upload` took a per-call upload token);
 - the **tracking state** in `.weegloo/<agent>/` (install record + version stamp);
 - directories the above leaves **empty** (`.claude/skills/`, `.agents/rules/`, …) — pruned with `rmdir`, which refuses a directory that still holds anything.
 
@@ -166,7 +168,7 @@ Detection can only see the **current project** and your **home directory**. An i
 For a staging stack or an enterprise deployment on customer domains, pass a JSON mapping of weegloo origins at install time. All fetched content (skill files, rule text, MCP config URLs, the version-check URL baked into the `weegloo-version` rule) is rewritten before it is written to disk — repo sources are never modified.
 
 ```bash
-npx weegloo@latest --agent claude --origins ./origins.acme.json --token <PAT>
+npx weegloo@latest --agent claude --origins ./origins.acme.json
 ```
 
 ```jsonc
@@ -213,7 +215,7 @@ In interactive mode the CLI asks the following questions in order (a flag from [
 
 1. **Install location** - Global (`~/.cursor/`) or current project (`.cursor/`)
 2. **IDE** - Claude Code / Codex / Antigravity / Android Studio / Cursor / Xcode
-3. **Personal Access Token** - Generate from the Weegloo console
+3. **Personal Access Token** - Android Studio only; generate from the Weegloo console
 4. **MCP server group** - `default` / `core` / `extra` / `all`
 5. **Skills** - Select skills to install (multi-select)
 6. **Rules** - Select rules to install (multi-select)
@@ -241,7 +243,7 @@ In interactive mode the CLI asks the following questions in order (a flag from [
 | Skills | `~/.agents/skills/<skill-name>/` | `.agents/skills/<skill-name>/` |
 | Instructions | `~/.codex/AGENTS.md` | `AGENTS.md` |
 
-Codex writes `mcp_servers.weegloo` (HTTP URL) and `mcp_servers.weegloo-upload` (npx + env with your Personal Access Token). Multiple Weegloo instruction rules are merged into `AGENTS.md` with stable markers (re-runs update sections by rule id). Codex's own `.rules` files are for command approval policy, not agent instructions.
+Codex writes `mcp_servers.weegloo` (HTTP URL) and `mcp_servers.weegloo-upload` (npx + env with the upload API URL; no token — the agent passes an upload token per call). Multiple Weegloo instruction rules are merged into `AGENTS.md` with stable markers (re-runs update sections by rule id). Codex's own `.rules` files are for command approval policy, not agent instructions.
 
 **Project installs also register the project as trusted** in `~/.codex/config.toml` (`[projects."<dir>"] trust_level = "trusted"`): Codex [only loads project-scoped `.codex/` config for trusted projects](https://developers.openai.com/codex/config-basic), so without this entry the MCP servers written to `.codex/config.toml` would be silently ignored (and `codex mcp login weegloo` would fail with "No MCP server named 'weegloo' found"). An existing `[projects."<dir>"]` entry — including an explicit `untrusted` decision — is never modified; the installer warns instead.
 
@@ -254,7 +256,7 @@ Codex path rationale: Codex discovers persistent instructions from `AGENTS.md` /
 | Skills | `~/.gemini/skills/<skill-name>/` | `.agents/skills/<skill-name>/` |
 | Rules | `~/.gemini/GEMINI.md` | `AGENTS.md` (project root) |
 
-Antigravity writes `mcpServers.weegloo` (HTTP URL via `serverUrl`) and `mcpServers.weegloo-upload` (npx + env with your Personal Access Token) into `mcp_config.json`. Behavioral rules are **not** written as separate files: they are merged into Antigravity's context file — `GEMINI.md` for a global install, `AGENTS.md` for a project install — with stable per-rule markers, so re-running the installer updates each section in place instead of duplicating content. `GEMINI.md` is Antigravity's global context file; `AGENTS.md` is the portable project context file (also read by other agents).
+Antigravity writes `mcpServers.weegloo` (HTTP URL via `serverUrl`) and `mcpServers.weegloo-upload` (npx + env with the upload API URL; no token — the agent passes an upload token per call) into `mcp_config.json`. Behavioral rules are **not** written as separate files: they are merged into Antigravity's context file — `GEMINI.md` for a global install, `AGENTS.md` for a project install — with stable per-rule markers, so re-running the installer updates each section in place instead of duplicating content. `GEMINI.md` is Antigravity's global context file; `AGENTS.md` is the portable project context file (also read by other agents).
 
 ### Android Studio
 **Project-only** — Android Studio has no global install (`--location global` is normalized to the current project).
@@ -274,7 +276,7 @@ The full, current catalog (20+ skills, 7 rules) is shown in the interactive pick
 ## Requirements
 
 - Node.js >= 18
-- Weegloo Personal Access Token ([generate from the console](https://console.weegloo.com))
+- A Weegloo account — plus a Personal Access Token for Android Studio only ([generate from the console](https://console.weegloo.com))
 
 ## Links
 

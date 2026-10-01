@@ -5,8 +5,9 @@
  *  - skill directories and rule files (or rule marker sections inside a shared AGENTS.md /
  *    GEMINI.md), for the ids the per-agent record claims plus any `weegloo-*` artifact still
  *    sitting in this agent's own stores (a pre-record install left no record to read);
- *  - the `weegloo` / `weegloo-upload` MCP server entries — and with them the Personal Access
- *    Token the installer wrote into that config;
+ *  - the `weegloo` / `weegloo-upload` MCP server entries — and with them any Personal Access
+ *    Token the installer wrote into that config (Android Studio, and installs made before the
+ *    upload server took a per-call upload token);
  *  - the tracking state under `.weegloo/<agent>/` (record + version stamp);
  *  - directories and context files that are left EMPTY by the above, since a leftover empty
  *    `.claude/skills/` or a BOM-only `AGENTS.md` is not "the state before the install".
@@ -122,17 +123,21 @@ export function listMcpServers(mcp) {
  * holding only weegloo servers was deleted this way even though it was committed to the repo.
  * An empty `{}` is untidy; taking someone's tracked file is worse.
  *
+ * `removedToken` says whether the removed entries held a Personal Access Token — the only case in
+ * which the user has a token left to revoke.
+ *
  * @param {{ kind: 'json'|'toml', file: string, container?: string }} mcp
- * @returns {{ removed: string[], file: string }}
+ * @returns {{ removed: string[], file: string, removedToken: boolean }}
  */
 export function removeMcpServers(mcp) {
-  const result = { removed: [], file: mcp?.file ?? null };
+  const result = { removed: [], file: mcp?.file ?? null, removedToken: false };
   if (!mcp || !fs.existsSync(mcp.file)) return result;
 
   if (mcp.kind === 'toml') {
     const existing = fs.readFileSync(mcp.file, 'utf-8');
     result.removed = MCP_SERVER_NAMES.filter((name) => existing.includes(`[mcp_servers.${name}]`));
     if (result.removed.length === 0) return result;
+    result.removedToken = /\[mcp_servers\.weegloo-upload\.env\][^[]*\bAUTH_BEARER_TOKEN\s*=\s*"[^"]/.test(existing);
     const stripped = stripWeeglooMcpSections(existing);
     fs.writeFileSync(mcp.file, stripped.trim() === '' ? '' : `${stripped}\n`, 'utf-8');
     return result;
@@ -141,6 +146,9 @@ export function removeMcpServers(mcp) {
   const config = readJsonOrNull(mcp.file);
   const container = config?.[mcp.container];
   if (!container || typeof container !== 'object') return result;
+  result.removedToken = Boolean(
+    container['weegloo-upload']?.env?.AUTH_BEARER_TOKEN || container['weegloo']?.headers?.Authorization
+  );
   for (const name of MCP_SERVER_NAMES) {
     if (container[name] == null) continue;
     delete container[name];
@@ -339,7 +347,7 @@ export function uninstallTarget(
     keptSkills: [],
     removedRules: [],
     keptRules: [],
-    mcp: { removed: [], file: store.mcp?.file ?? null },
+    mcp: { removed: [], file: store.mcp?.file ?? null, removedToken: false },
     removedDirs: [],
     removedState: [],
   };
@@ -662,7 +670,7 @@ export async function runUninstall(config, deps = {}) {
 
   log(chalk.bold.green('  ✔  Uninstall complete!'));
   log('');
-  if (reports.some((r) => r.mcp.removed.length > 0)) {
+  if (reports.some((r) => r.mcp.removedToken)) {
     // A staging / enterprise install recorded its origins mapping — point at ITS console.
     const origins = targets.find((t) => t.origins)?.origins ?? null;
     log(chalk.dim('  The Personal Access Token was removed from the MCP config, but the token'));

@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { PKG_PLUGIN_REF, listBranches, loadResources, fetchCountry } from './github.js';
 import { orderBranchesForPicker } from './versions.js';
-import { parseCliArgs, resolveConfig, HELP_TEXT } from './cli.js';
+import { parseCliArgs, resolveConfig, HELP_TEXT, TOKEN_AGENTS } from './cli.js';
 import { CORE_RULE_IDS, partitionCoreRules } from './self-update.js';
 import { runUpdate, countryReportLines } from './update.js';
 import { countryCheckUrl, resolveCountry, filterResourcesByCountry } from './country.js';
@@ -17,7 +17,8 @@ import { installCodex, handleCodexMcpLogin, printCodexLoginNotice } from './code
 import { validateToken, cmaMeUrl } from './validate-token.js';
 
 /**
- * Where the user gets the Personal Access Token this installer stores in the MCP config.
+ * Where the user gets the Personal Access Token this installer stores in the MCP config — only
+ * for the agents in TOKEN_AGENTS (Android Studio); every other agent is asked for no token.
  *
  * This is the console's dedicated hand-off screen, not the PAT list page: it issues the token
  * on arrival and offers it for copying, so the user never has to find a button or invent a name.
@@ -422,18 +423,28 @@ async function main() {
   const mcp = resources.mcp;
 
   if (installMcp) {
-    // Token: flag/env pins it; otherwise prompt (interactive). Non-interactive with no
-    // token + MCP was already rejected by resolveConfig, so we never block on stdin here.
-    // Whichever source it comes from, the token is verified against CMA GET /v1/me (200)
-    // before we use it; the prompt re-asks until a token verifies.
-    token = await resolveValidToken({
-      providedToken: config.token,
-      // origins가 있으면 검증 대상은 명시적으로 origins.cma (미매핑이면 프로덕션) — 매핑된
-      // uploadApiUrl에 문자열 휴리스틱을 돌리면 프로덕션 폴백으로 새는 버그가 있었음.
-      meUrl: cmaMeUrl(mcp, origins),
-      nonInteractive: config.nonInteractive,
-      patUrl: applyOriginMapping(PAT_GENERATION_URL, origins),
-    });
+    // Token: only the agents in TOKEN_AGENTS (Android Studio) carry a PAT in their MCP config —
+    // every other agent signs in to weegloo with OAuth and hands weegloo-upload a per-call upload
+    // token, so it is asked nothing. Flag/env pins the token; otherwise prompt (interactive).
+    // Non-interactive with no token was already rejected by resolveConfig, so we never block on
+    // stdin here. Whichever source it comes from, the token is verified against CMA GET /v1/me
+    // (200) before we use it; the prompt re-asks until a token verifies.
+    if (TOKEN_AGENTS.includes(ide)) {
+      token = await resolveValidToken({
+        providedToken: config.token,
+        // origins가 있으면 검증 대상은 명시적으로 origins.cma (미매핑이면 프로덕션) — 매핑된
+        // uploadApiUrl에 문자열 휴리스틱을 돌리면 프로덕션 폴백으로 새는 버그가 있었음.
+        meUrl: cmaMeUrl(mcp, origins),
+        nonInteractive: config.nonInteractive,
+        patUrl: applyOriginMapping(PAT_GENERATION_URL, origins),
+      });
+    } else if (config.token != null && config.agent == null) {
+      // A pinned --agent already got this warning from resolveConfig; a picked one could not.
+      console.log(
+        chalk.yellow('  ⚠  ') +
+        chalk.dim(`A token was provided but ${ide} signs in with OAuth and needs none (only Android Studio does); the token is ignored.`)
+      );
+    }
 
     // MCP group: --mcp <group> pins it (default ⇒ ''); otherwise prompt or default ''.
     if (config.mcpGroup != null) {
@@ -597,7 +608,7 @@ async function main() {
   // still respecting deliberate deselections. "Offers" is after the country filter: an item
   // withheld for this country was never offered, so a later country change auto-adds it as new.
   const answers = {
-    token: installMcp ? token : undefined,
+    token: installMcp && TOKEN_AGENTS.includes(ide) ? token : undefined,
     pluginRef,
     version: resources.version,
     mcpGroup,

@@ -175,7 +175,6 @@ export function maintainAntigravityProjectRulesFile(agentsPath = getAntigravityR
 }
 
 export async function installAntigravity({
-  token,
   pluginRef,
   version,
   mcpGroup,
@@ -216,13 +215,13 @@ export async function installAntigravity({
       config.mcpServers['weegloo'] = {
         serverUrl: buildMcpUrlWithGroup(weeglooUrl, mcpGroup),
       };
+      // No token in env: the agent passes weegloo-upload an upload token per call (cma_IssueUploadToken).
       const { command, args } = uploadServerCommand();
       config.mcpServers['weegloo-upload'] = {
         command,
         args,
         env: {
           UPLOAD_API_URL: uploadApiUrl,
-          AUTH_BEARER_TOKEN: token,
         },
       };
 

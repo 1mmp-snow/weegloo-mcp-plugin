@@ -17,7 +17,7 @@ Before setting up the Weegloo MCP server, ensure you have:
 - Node.js >= 18
   - `weegloo-upload` is an npm package required for file transfers with an MCP server. For more details, please refer to [weegloo-upload](https://www.npmjs.com/package/weegloo-upload)
 - Cursor IDE or Claude Code CLI installed
-- You must be registered with Weegloo and generate a Personal Access Token in the Weegloo console in advance to authenticate with the MCP server.
+- A Weegloo account. The `weegloo` MCP server signs you in through the IDE (OAuth), and `weegloo-upload` takes an upload token the agent issues through it (`cma_IssueUploadToken`), so no Personal Access Token is needed — except for Android Studio, whose `weegloo` server authenticates with one (see the [installer README](installer-cli/README.md)).
 
 ## Installation
 
@@ -54,15 +54,14 @@ The plugin’s MCP configuration lives at `plugins/weegloo/.mcp.json` (repo root
       "command": "npx",
       "args": ["-y", "weegloo-upload"],
       "env": {
-        "UPLOAD_API_URL": "https://upload.weegloo.com/v1",
-        "AUTH_BEARER_TOKEN": "${PERSONAL_ACCESS_TOKEN}"
+        "UPLOAD_API_URL": "https://upload.weegloo.com/v1"
       }
     }
   }
 }
 ```
 
-After completing the plugin setup, you must replace the `AUTH_BEARER_TOKEN` environment variable of the `weegloo-upload` MCP server with the `Personal Access Token` issued in advance from the Weegloo console.
+No token goes into this file: the agent passes `weegloo-upload` an upload token it issues through the `weegloo` server (`cma_IssueUploadToken`).
 
 ### Cursor
 
@@ -93,22 +92,17 @@ Add the following configuration to connect to the remote Weegloo MCP server:
       "command": "npx",
       "args": ["-y", "weegloo-upload"],
       "env": {
-        "UPLOAD_API_URL": "https://upload.weegloo.com/v1",
-        "AUTH_BEARER_TOKEN": "${PERSONAL_ACCESS_TOKEN}"
+        "UPLOAD_API_URL": "https://upload.weegloo.com/v1"
       }
     }
   }
 }
 ```
 
-#### Step 4: Set `Personal Access Token`
+#### Step 4: Authenticate
 
-After completing the plugin setup, you must replace the `AUTH_BEARER_TOKEN` environment variable of the `weegloo-upload` MCP server with the `Personal Access Token` issued in advance from the Weegloo console.
-
-#### Step 5: Authenticate
-
-Save the configuration. You will also see a connect button once added. Click that to authenticate into your Weegloo.
-Enter the `Personal Access Token` issued in advance from the Weegloo console.
+Save the configuration. You will also see a connect button once added. Click that and sign in with your Weegloo account in the browser.
+No token is needed for `weegloo-upload`: the agent issues it an upload token through the `weegloo` server (`cma_IssueUploadToken`).
 
 ## MCP Servers
 The MCP server tool groups are as follows:

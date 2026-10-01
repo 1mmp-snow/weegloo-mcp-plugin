@@ -65,7 +65,6 @@ function buildMcpUrlWithGroup(baseUrl, group) {
 }
 
 export async function installCursor({
-  token,
   pluginRef,
   version,
   mcpGroup,
@@ -106,13 +105,13 @@ export async function installCursor({
         type: 'http',
         url: buildMcpUrlWithGroup(weeglooUrl, mcpGroup),
       };
+      // No token in env: the agent passes weegloo-upload an upload token per call (cma_IssueUploadToken).
       const { command, args } = uploadServerCommand();
       config.mcpServers['weegloo-upload'] = {
         command,
         args,
         env: {
           UPLOAD_API_URL: uploadApiUrl,
-          AUTH_BEARER_TOKEN: token,
         },
       };
 

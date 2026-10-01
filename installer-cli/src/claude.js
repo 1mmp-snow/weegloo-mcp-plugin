@@ -52,7 +52,6 @@ export function getClaudeRulesDir(scope = 'global') {
 }
 
 export async function installClaude({
-  token,
   pluginRef,
   version,
   mcpGroup,
@@ -94,6 +93,7 @@ export async function installClaude({
         type: 'http',
         url: buildMcpUrlWithGroup(weeglooUrl, mcpGroup),
       };
+      // No token in env: the agent passes weegloo-upload an upload token per call (cma_IssueUploadToken).
       const { command, args, env } = uploadServerCommand({ injectPath: host === 'xcode' });
       config.mcpServers['weegloo-upload'] = {
         command,
@@ -101,7 +101,6 @@ export async function installClaude({
         env: {
           ...env,
           UPLOAD_API_URL: uploadApiUrl,
-          AUTH_BEARER_TOKEN: token,
         },
       };
 

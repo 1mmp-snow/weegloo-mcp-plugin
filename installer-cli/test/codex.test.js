@@ -5,12 +5,20 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  buildWeeglooMcpToml,
   ensureCodexProjectTrust,
   getCodexInstructionsPath,
   getCodexSkillsDir,
   readCodexProjectTrust,
   upsertRuleInAgentsMd,
 } from '../src/codex.js';
+
+test('buildWeeglooMcpToml writes no token: weegloo-upload gets a per-call upload token', () => {
+  const toml = buildWeeglooMcpToml({ weeglooUrl: 'https://ai.weegloo.com/mcp', uploadApiUrl: 'https://upload.weegloo.com/v1' });
+  assert.ok(toml.includes('[mcp_servers.weegloo-upload.env]'));
+  assert.ok(toml.includes('UPLOAD_API_URL = "https://upload.weegloo.com/v1"'));
+  assert.ok(!toml.includes('AUTH_BEARER_TOKEN'), toml);
+});
 
 test('Codex project instructions and skills use auto-discovered paths', () => {
   const previousCwd = process.cwd();

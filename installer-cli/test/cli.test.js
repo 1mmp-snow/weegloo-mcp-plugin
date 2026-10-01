@@ -40,15 +40,23 @@ test('parseCliArgs: --mcp requires a value (missing / flag-like value both throw
 
 // ── happy-path resolution ───────────────────────────────────────────────────
 
-test('resolveConfig: fully non-interactive MCP install needs only agent + token', () => {
-  const { errors, config } = resolve(['-y', '-a', 'claude'], { env: { WEEGLOO_TOKEN: 'pat' } });
+test('resolveConfig: fully non-interactive MCP install needs only --agent (no token outside Android Studio)', () => {
+  const { errors, warnings, config } = resolve(['-y', '-a', 'claude']);
   assert.deepEqual(errors, []);
+  assert.ok(!warnings.some((w) => /token/i.test(w)));
   assert.equal(config.nonInteractive, true);
   assert.equal(config.pluginRef, 'latest'); // baked-in default, no picker
   assert.equal(config.agent, 'claude');
-  assert.equal(config.token, 'pat');
+  assert.equal(config.token, null);
   assert.equal(config.installMcp, null); // unset ⇒ defaults to on downstream
   assert.equal(config.installSkillsRules, null);
+});
+
+test('resolveConfig: Android Studio non-interactive MCP install needs agent + token', () => {
+  const { errors, warnings, config } = resolve(['-y', '-a', 'androidstudio'], { env: { WEEGLOO_TOKEN: 'pat' } });
+  assert.deepEqual(errors, []);
+  assert.ok(!warnings.some((w) => /token is ignored/.test(w)));
+  assert.equal(config.token, 'pat');
 });
 
 test('resolveConfig: --mcp pins group and implies install; default ⇒ empty group', () => {
@@ -139,10 +147,23 @@ test('resolveConfig: non-interactive requires --agent', () => {
   assert.ok(resolve(['-y'], { env: { WEEGLOO_TOKEN: 'pat' } }).errors.some((e) => /--agent is required/.test(e)));
 });
 
-test('resolveConfig: non-interactive + MCP needs a token', () => {
-  assert.ok(resolve(['-y', '-a', 'claude']).errors.some((e) => /Personal Access Token is required/.test(e)));
+test('resolveConfig: non-interactive + MCP needs a token only for Android Studio', () => {
+  assert.ok(resolve(['-y', '-a', 'androidstudio']).errors.some((e) => /Personal Access Token is required/.test(e)));
   // --no-mcp removes the requirement
-  assert.deepEqual(resolve(['-y', '-a', 'claude', '--no-mcp']).errors, []);
+  assert.deepEqual(resolve(['-y', '-a', 'androidstudio', '--no-mcp']).errors, []);
+  // every other agent signs in with OAuth and hands weegloo-upload a per-call upload token
+  for (const agent of ['claude', 'cursor', 'codex', 'antigravity']) {
+    assert.deepEqual(resolve(['-y', '-a', agent]).errors, [], agent);
+  }
+});
+
+test('resolveConfig: a token for an OAuth agent warns (ignored), not an error', () => {
+  const { errors, warnings } = resolve(['-y', '-a', 'claude', '-t', 'pat']);
+  assert.deepEqual(errors, []);
+  assert.ok(warnings.some((w) => /claude signs in with OAuth and needs none/.test(w)));
+  // with MCP off the existing --no-mcp warning covers it — no second token warning
+  const noMcp = resolve(['-y', '-a', 'claude', '-t', 'pat', '--no-mcp']).warnings;
+  assert.equal(noMcp.filter((w) => /token is ignored/.test(w)).length, 1);
 });
 
 test('resolveConfig: non-TTY auto-enables non-interactive (same requirements)', () => {

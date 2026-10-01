@@ -27,6 +27,14 @@ export const MCP_GROUPS = ['default', 'core', 'extra', 'all'];
 export const HOSTS = ['xcode'];
 /** Agents that can run *inside* a GUI host (Xcode Intelligence hosts only these). */
 export const HOSTABLE_AGENTS = ['claude', 'codex'];
+/**
+ * Agents whose MCP config still carries a Personal Access Token: Android Studio's `weegloo`
+ * server authenticates with it as an `Authorization` header (no OAuth Connect step). Every
+ * other agent signs in to `weegloo` with OAuth, and `weegloo-upload` takes a per-call upload
+ * token the agent issues through that server (`cma_IssueUploadToken`) — so for them no PAT
+ * is asked for, and none is written to disk.
+ */
+export const TOKEN_AGENTS = ['androidstudio'];
 
 export const HELP_TEXT = `
   Weegloo MCP Plugin Installer
@@ -48,7 +56,9 @@ export const HELP_TEXT = `
     -l, --location <loc> Install location: ${LOCATIONS.join(' | ')} (default: global)
         --mcp <group>    Install the MCP server with group: ${MCP_GROUPS.join(' | ')}
         --no-mcp         Do not install the MCP server
-    -t, --token <pat>    Weegloo Personal Access Token (also reads WEEGLOO_TOKEN)
+    -t, --token <pat>    Weegloo Personal Access Token, for Android Studio only
+                         (also reads WEEGLOO_TOKEN; other agents sign in with
+                         OAuth and need no token)
         --ignore-skill   Do not install Skills
         --ignore-rule    Do not install Rules
         --origins <file> Origins mapping (JSON file or inline JSON): rewrite the
@@ -68,7 +78,7 @@ export const HELP_TEXT = `
                          branch defaults to the one the agent was installed from.
     -u, --uninstall      Remove an install and restore the pre-install state:
                          deletes the installed Skills/Rules, the weegloo MCP server
-                         entries (and the token stored with them) and the tracking
+                         entries (and any token stored with them) and the tracking
                          state, plus anything they leave empty. Works offline (no
                          branch, no token). Interactive: detects every install in
                          this project and your home directory and asks which to
@@ -81,8 +91,8 @@ export const HELP_TEXT = `
 
   Non-interactive defaults: branch=latest, MCP+Skills+Rules on, group=default,
   location=global, all Skills and Rules selected. --agent is always required,
-  and a token (--token / WEEGLOO_TOKEN) is required whenever MCP is installed
-  (never for --update or --uninstall).
+  and a token (--token / WEEGLOO_TOKEN) is required only when MCP is installed
+  for Android Studio (never for other agents, --update or --uninstall).
 `;
 
 const OPTIONS = {
@@ -359,9 +369,9 @@ export function resolveConfig({ values, env = {}, isTTY = true, pkgPluginRef = '
     if (agent == null && values.agent == null) {
       errors.push(`--agent is required in non-interactive mode (${AGENTS.join(' | ')}).`);
     }
-    if (effInstallMcp === true && token == null) {
+    if (effInstallMcp === true && token == null && TOKEN_AGENTS.includes(agent)) {
       errors.push(
-        'A Personal Access Token is required for MCP in non-interactive mode (--token or WEEGLOO_TOKEN env).'
+        'A Personal Access Token is required for the Android Studio MCP in non-interactive mode (--token or WEEGLOO_TOKEN env).'
       );
     }
   }
@@ -369,6 +379,9 @@ export function resolveConfig({ values, env = {}, isTTY = true, pkgPluginRef = '
   // ── soft warnings (proceed anyway) ──────────────────────────────────────────
   if (!update && !uninstall && token != null && installMcp === false) {
     warnings.push('A token was provided but --no-mcp is set; the token is ignored.');
+  }
+  if (!update && !uninstall && token != null && installMcp !== false && agent != null && !TOKEN_AGENTS.includes(agent)) {
+    warnings.push(`A token was provided but ${agent} signs in with OAuth and needs none (only Android Studio does); the token is ignored.`);
   }
   if (!update && !uninstall && host != null && installMcp === false) {
     warnings.push(`--host ${host} only affects the npx upload server, so it has no effect with --no-mcp.`);
