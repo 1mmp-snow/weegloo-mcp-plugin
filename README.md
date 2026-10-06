@@ -109,10 +109,9 @@ The MCP server tool groups are as follows:
 
 | Group | Description | URL |
 |----------|----------|-----|
-| {none}  | Includes the basic set of tools. | https://ai.weegloo.com/mcp |
-| core  | Includes the basic tools, excluding those related to WebHosting and Tokens. | https://ai.weegloo.com/mcp?group=core |
-| extra | Includes tools related to Usage, Webhooks, Tags, and Limits. | https://ai.weegloo.com/mcp?group=extra |
-| all | Includes all available tools. If you register the MCP server for this group, the other MCP servers are not required. | https://ai.weegloo.com/mcp?group=all |
+| {none}  | Includes the basic set of tools: everything in `core`, plus Script, Webhook, Scheduler, WebHosting, ServiceLogin, ServiceUserRole, access tokens, and EmailAccount. | https://ai.weegloo.com/mcp |
+| core  | Content, ContentType, Media, Locale, and Organization / Space / membership / role tools only. | https://ai.weegloo.com/mcp?group=core |
+| all | Includes all available tools: the basic set plus Comment and Tag. If you register the MCP server for this group, the other groups are not required. | https://ai.weegloo.com/mcp?group=all |
 
 
 ## Documentation & Resources

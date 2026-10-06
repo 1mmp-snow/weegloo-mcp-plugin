@@ -192,8 +192,8 @@ deleting the old one.** Do not offer the user an in-place credential change. Rep
   rejected. So the Google default is also the one that always works. Do not present an arbitrary host as
   guaranteed — and on rejection, follow the plan-limit guidance (explain, link pricing, ask — never
   auto-upgrade).
-- **`Update` is REST-only.** Create / list / get / delete are MCP tools (in the **default** tool group,
-  and in `all` — but **not** in `core` or `extra`); **updating is not exposed as a tool at all**. As an
+- **`Update` is REST-only.** Create / list / get / delete are MCP tools;
+  **updating is not exposed as a tool at all**. As an
   agent you can create and delete an account but cannot edit one over MCP — say that plainly instead of
   guessing a tool name.
 

@@ -66,7 +66,7 @@ rules:
     items:
       - **Applies to ANY plan-limit / quota error** (a **`WGL429*`** code or an HTTP **429**-class "limit/quota exceeded", for any resource) — the current plan's limit has been reached, not a transient failure. **Do NOT silently retry, loop, or just surface the raw code.**
       - Answer in the **user's language** with what failed (naming the code), the upgrade path — **https://docs.weegloo.com/pricing/pricing/** — and alternatives (free a slot by deleting a resource of the same type; wait if it is genuinely a rate limit). **Then ASK what they want to do:** never auto-upgrade, auto-delete, or retry in a loop — this is a user/billing decision.
-      - **State the current plan ONLY if verifiable — never guess a tier.** With the Usage/Limits tools (MCP installed with `?group=extra` / `?group=all`) you may state the concrete plan and usage; without them say only that the current plan's limit has been reached, naming no tier.
+      - **State the current plan ONLY if verifiable — never guess a tier.** If you have not read the plan, say only that the current plan's limit has been reached, naming no tier.
       - **Never engineer around the cap:** do not switch `Organization`/`Space` to dodge it, and do not delete resources without explicit user confirmation.
 
   - section: Highlight what the user must act on or must know (green / red where the surface supports it)

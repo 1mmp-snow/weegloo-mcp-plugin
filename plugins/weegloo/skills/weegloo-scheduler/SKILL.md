@@ -77,9 +77,8 @@ manage a Scheduler.
 | Patch (RFC-6902) | `PATCH …/schedulers/{schedulerId}` | — REST only |
 | Run history | `GET …/schedulers/{schedulerId}/executions[/{executionId}]` | — REST only |
 
-- The Scheduler tools ship in the MCP **default** tool group. Use them; do not hand-call CMA HTTP for
-  Schedulers from the agent. If they are absent from the session, the Weegloo MCP needs
-  re-authenticating / updating (`weegloo-global-rules`) — **do not** fall back to raw HTTP.
+- Use the Scheduler MCP tools; do not hand-call CMA HTTP for Schedulers from the agent, even if the
+  tools are absent from the session.
 - **PATCH and the run history have no MCP tool.** An agent edits with `cma_UpdateOneScheduler` (full
   replacement); the run history is readable from **application code** over REST only.
 - `include=1` expands `sys.createdBy` and `sys.script`. The expanded **Script** is filtered by the

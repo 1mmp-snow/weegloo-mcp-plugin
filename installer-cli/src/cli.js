@@ -18,7 +18,7 @@ export const AGENTS = ['cursor', 'claude', 'codex', 'antigravity', 'androidstudi
 /** Install scopes (maps to `scope`). */
 export const LOCATIONS = ['project', 'global'];
 /** MCP server groups. `default` is the user-facing alias for the empty group ''. */
-export const MCP_GROUPS = ['default', 'core', 'extra', 'all'];
+export const MCP_GROUPS = ['default', 'core', 'all'];
 /**
  * GUI hosts that launch an agent with a bare login PATH, so the local `npx`-based
  * `weegloo-upload` server needs an explicit PATH env to be found. Orthogonal to

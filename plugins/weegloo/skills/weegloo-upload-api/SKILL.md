@@ -101,8 +101,7 @@ conservative free-tier floor; paid tiers are larger.
 - The plan **tier** is readable from the **Organization** (`sys.plan.sys.id`, e.g. `free`) — a Space
   has no plan field, so go Space → its Organization. But the tier id does **not** carry the numeric
   size cap, and per-Space overrides can diverge from the tier's nominal limit, so use it only as a
-  rough hint — never as a hardcoded limit. Exact caps/usage need the Usage/Limits tools (Weegloo MCP
-  installed with `?group=extra` or `?group=all`) or the docs/pricing page.
+  rough hint — never as a hardcoded limit.
 
 ## Step 2a — Create a Media from the Upload
 

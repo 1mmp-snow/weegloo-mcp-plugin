@@ -141,6 +141,7 @@ test('resolveConfig: invalid enum values are rejected with valid list', () => {
   assert.ok(resolve(['-a', 'vscode']).errors.some((e) => /Invalid --agent/.test(e)));
   assert.ok(resolve(['-l', 'somewhere']).errors.some((e) => /Invalid --location/.test(e)));
   assert.ok(resolve(['--mcp', 'mega']).errors.some((e) => /Invalid --mcp group/.test(e)));
+  assert.ok(resolve(['--mcp', 'extra']).errors.some((e) => /Invalid --mcp group/.test(e))); // no such server group
 });
 
 test('resolveConfig: non-interactive requires --agent', () => {
