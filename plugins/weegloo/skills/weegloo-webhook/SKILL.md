@@ -33,11 +33,6 @@ A **Webhook** reacts to **Space events**. On a matching event it performs **exac
 > Base URLs, vendor JSON, OpenAPI discovery: `weegloo-api-endpoints`. Role for job Content and the
 > Script `Execute` permission: `weegloo-space-role` / `weegloo-script`.
 
-> **Webhook CRUD lives in the `extra` MCP tool group** (or `all`). If no `cma_*Webhook*` tool is
-> available, it is **not installed** in this session — not missing from the platform. Configure the
-> Weegloo MCP with `?group=extra` or `?group=all` (project README) rather than concluding Webhooks
-> are unavailable.
-
 ## Resource fields (CMA `Webhook`)
 
 | Field | Notes |
@@ -59,9 +54,8 @@ A **Webhook** reacts to **Space events**. On a matching event it performs **exac
 
 Classic outbound delivery: on a matching event, Weegloo builds a payload from the triggering entity,
 applies **`transformation`** (method, content type, JSON-Pointer body templating), adds `headers`
-(keys as **secret**), and POSTs to `url`. Delivery is **at-most-once**; inspect **`WebhookCall`** /
-**`WebhookCallDetail`** / **`WebhookStatus`** for results. This path does **not** write anything back
-into the Space — it only notifies the external system.
+(keys as **secret**), and POSTs to `url`. Delivery is **at-most-once**. This path does **not** write
+anything back into the Space — it only notifies the external system.
 
 ## Path B — run a Script (`script` Refer)
 

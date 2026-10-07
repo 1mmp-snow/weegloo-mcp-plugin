@@ -25,7 +25,7 @@ Run with no options for the interactive installer. **Any option below pre-fills 
 | `-a, --agent <id>` | Target IDE/agent: `cursor` \| `claude` \| `codex` \| `antigravity` \| `androidstudio`. |
 | `--host <id>` | Run the agent inside a GUI host: `xcode`. Only valid with `--agent claude`/`codex`. Injects a `PATH` into the `weegloo-upload` server env so the host can find `npx` (see [GUI hosts](#gui-hosts-xcode)). |
 | `-l, --location <loc>` | Install location: `project` \| `global` (default: `global`). |
-| `--mcp <group>` | Install the MCP server with group: `default` \| `core` \| `extra` \| `all`. |
+| `--mcp <group>` | Install the MCP server with group: `default` \| `core` \| `all`. |
 | `--no-mcp` | Do not install the MCP server. |
 | `-t, --token <pat>` | Weegloo Personal Access Token, **Android Studio only** (its `weegloo` server authenticates with it). Every other agent signs in with OAuth and gives `weegloo-upload` a per-call upload token, so a token given for them is ignored with a warning. Also reads `WEEGLOO_TOKEN` (the flag wins). |
 | `--ignore-skill` | Do not install Skills. |
@@ -216,7 +216,7 @@ In interactive mode the CLI asks the following questions in order (a flag from [
 1. **Install location** - Global (`~/.cursor/`) or current project (`.cursor/`)
 2. **IDE** - Claude Code / Codex / Antigravity / Android Studio / Cursor / Xcode
 3. **Personal Access Token** - Android Studio only; generate from the Weegloo console
-4. **MCP server group** - `default` / `core` / `extra` / `all`
+4. **MCP server group** - `default` / `core` / `all`
 5. **Skills** - Select skills to install (multi-select)
 6. **Rules** - Select rules to install (multi-select)
 

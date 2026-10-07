@@ -38,12 +38,8 @@ const MCP_GROUP_CHOICES = [
     value: '',
   },
   {
-    name: `${chalk.bold('core')}      ${chalk.dim('Basic tools, excluding WebHosting and Tokens')}`,
+    name: `${chalk.bold('core')}      ${chalk.dim('Content and Space tools only (no Script, Webhook, WebHosting, login, tokens)')}`,
     value: 'core',
-  },
-  {
-    name: `${chalk.bold('extra')}     ${chalk.dim('Adds Usage, Webhooks, Tags, and Limits tools')}`,
-    value: 'extra',
   },
   {
     name: `${chalk.bold('all')}       ${chalk.dim('All tools in a single server')}`,

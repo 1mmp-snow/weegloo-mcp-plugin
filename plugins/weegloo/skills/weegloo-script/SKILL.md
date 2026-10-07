@@ -27,7 +27,7 @@ locking); **privilege delegation** (a low-privilege caller performs ONE privileg
 - **Authoring is CMA-only** — CRUD it with a **Weegloo User** Bearer on `https://cma.weegloo.com`
   (`/v1/spaces/{spaceId}/scripts[/{scriptId}]`; PUT is full replacement and takes `X-Weegloo-Version`;
   **delete is blocked while a Webhook or Scheduler references it**). There is **no ACMA authoring**.
-  Over MCP use the `cma_*` Script tools when present (they ship in the **`extra`** / **`all`** group).
+  Over MCP use the `cma_*` Script tools when present.
 - **Execution has its own host** — **`https://script.weegloo.com`**, whatever identity calls it
   (Weegloo User Bearer, **`SpaceAccessToken`**, or ServiceLogin Bearer); each needs **Script
   `Execute`** on the role that identity resolves to.
