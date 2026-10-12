@@ -170,6 +170,7 @@ are not searchable at all) — `weegloo-create-content-type`.
 | `Regex` `pattern` — as authored | **128 chars** (rejected at save) |
 | `Regex` `value` — **resolved** text | **10,240 chars** (over ⇒ statement fails) |
 | Max `Http` **response body** size | **10 MiB** (larger ⇒ statement throws) |
+| `Http` file body — each `urlBody` / part `url` fetched | **per-plan** (larger ⇒ action fails, not retried) |
 | External calls inside `Loop` / `ResourceForEach` | **allowed** |
 
 **The resolved-length caps are checked when the statement runs, not at save** — they bound the
