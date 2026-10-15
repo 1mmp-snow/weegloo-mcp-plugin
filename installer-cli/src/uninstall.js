@@ -19,9 +19,9 @@
  *  - SHARED STORES ARE REFERENCE-COUNTED. `.agents/skills` and `<cwd>/AGENTS.md` are physically
  *    shared between agents, so an id another agent's record still claims is left in place and
  *    only this agent's tracking lets go of it (see self-update.js withoutSharerClaims).
- *  - NOTHING IS INFERRED ABOUT THE USER'S OWN FILES. A Codex project-trust entry, a Claude
- *    marketplace plugin, and the PAT itself were never created by this installer's file writes
- *    (or belong to the user's account), so they are reported, never deleted.
+ *  - NOTHING IS INFERRED ABOUT THE USER'S OWN FILES. A Codex project-trust entry and the PAT
+ *    itself were never created by this installer's file writes (or belong to the user's
+ *    account), so they are reported, never deleted.
  *
  * Scope: exactly what an install touches — the chosen scope's stores. Detection can therefore
  * only see the CURRENT project and the user's home; an install made inside another project
@@ -679,12 +679,6 @@ export async function runUninstall(config, deps = {}) {
     log('');
   }
   const notes = [];
-  if (targets.some((t) => t.agent === 'claude')) {
-    notes.push(
-      'Claude Code: if you also added the marketplace plugin, remove it with ' +
-      '`claude plugin uninstall weegloo@weegloo-plugins`.'
-    );
-  }
   if (targets.some((t) => t.agent === 'codex')) {
     notes.push(
       `Codex: the project trust entry in ${getCodexConfigPath('global')} was left as-is (it is ` +

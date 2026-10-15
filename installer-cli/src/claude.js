@@ -190,25 +190,11 @@ export async function installClaude({
 
   // ── Next steps ──────────────────────────────────────────────
   console.log();
-  console.log(chalk.dim('  💡 Claude Code: add marketplace, then install the plugin:'));
-  console.log();
   console.log(
-    '     ' +
-    chalk.cyan('claude plugin marketplace add') +
-    ' ' +
-    chalk.white('https://github.com/weeglooapi/weegloo-mcp-plugin')
-  );
-  console.log(
-    '     ' + chalk.cyan('claude plugin install') + ' ' + chalk.white('weegloo@weegloo-plugins')
-  );
-  console.log();
-  console.log(chalk.dim('  Or MCP-only from a local clone (plugin root):'));
-  console.log();
-  console.log('     ' + chalk.cyan('git clone https://github.com/weeglooapi/weegloo-mcp-plugin.git'));
-  console.log(
-    '     ' +
-    chalk.cyan('claude mcp add-from-claude-plugin') +
-    ' ' +
-    chalk.white('./weegloo-mcp-plugin/plugins/weegloo')
+    chalk.dim(
+      installMcp
+        ? '  💡 Restart Claude Code (or open a new session), then sign in with /mcp → weegloo → Authenticate.'
+        : '  💡 Restart Claude Code (or open a new session) to load the skills and rules.'
+    )
   );
 }

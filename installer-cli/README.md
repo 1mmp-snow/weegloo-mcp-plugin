@@ -145,7 +145,7 @@ What it does **not** touch:
 - **anything the install record does not claim.** The per-agent record is the only authority on what the installer put there. A `weegloo-*` name found on disk that the record does not list is reported as **unverified** and never removed unless you pick it out by name — it may well be your own file (a repo-authored `weegloo-npm-publish` skill was deleted this way before this rule existed). `-y` never removes unverified items at all; it names what it skipped.
 - **files it cannot prove it created.** Config and context files — `.mcp.json`, `config.toml`, `AGENTS.md`, `GEMINI.md` — are only ever *edited*: our entries and marker sections come out, the file stays, even when that leaves it empty. Other MCP servers and unrelated settings in the same file are preserved.
 - **files another agent still uses.** `.agents/skills` and `<cwd>/AGENTS.md` are physically shared, so an id another agent's record still claims is left alone and only this agent's tracking lets go of it. Uninstall the last claimer and the file is finally freed.
-- **the Codex project-trust entry**, a Claude Code marketplace plugin, or **the PAT itself** — none of those are the installer's file writes (or they live in your account). They are reported at the end with what to do about them.
+- **the Codex project-trust entry** or **the PAT itself** — neither is the installer's file write (or it lives in your account). They are reported at the end with what to do about them.
 
 Interactive runs detect every install in the current project and your home directory, list what each holds, and **name every item** before deleting anything (a bare count is unrecognizable). An install seen only in a file shared with another agent is offered *unchecked*, and unverified items get their own separate, unchecked question after the main confirmation. `-y` skips every prompt and removes exactly `--agent` at `--location` (default `global`).
 
@@ -206,8 +206,6 @@ npx weegloo@latest -y --agent claude --no-mcp --country KR
 # Fix a mis-detected country on an existing install
 npx weegloo@latest --agent claude --location global --update --country KR
 ```
-
-The Claude Code and Cursor plugin marketplaces read the repository files directly, so installs made that way are not country-filtered: they get each skill's default version in every country.
 
 ## Installation Flow
 
@@ -275,7 +273,7 @@ The full, current catalog (20+ skills, 7 rules) is shown in the interactive pick
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 18.3
 - A Weegloo account — plus a Personal Access Token for Android Studio only ([generate from the console](https://console.weegloo.com))
 
 ## Links
