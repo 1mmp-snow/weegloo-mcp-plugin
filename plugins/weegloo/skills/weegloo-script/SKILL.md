@@ -1,6 +1,6 @@
 ---
 name: weegloo-script
-description: Weegloo Script — declarative backend endpoints in a Space, run by POST /execute (script.weegloo.com). Use for server logic with no backend: call a third-party API (LLM, image, search, payment) and write the result into Content/Media; react to a Space event (Webhook); verify an inbound webhook signature (HMAC, replay); a token-free anonymous endpoint; ordered all-or-nothing work with rollback; concurrency-safe writes (sys.version); delegating ONE privileged op to a low-privilege caller (anonymous board password gate); job→poll flows; Script Execute permission. 스크립트, 백엔드 없이 서버 로직, 외부 API 호출, 웹훅 서명 검증, 동시성, 권한 위임.
+description: Weegloo Script — declarative backend endpoints in a Space, run by POST /execute (script.weegloo.com). Use for server logic with no backend: call a third-party API (LLM, image, search, payment) and write the result into Content/Media; react to a Space event (Webhook); verify an inbound webhook signature (HMAC, replay); a token-free anonymous endpoint; ordered all-or-nothing work with rollback; concurrency-safe writes (sys.version); delegating ONE privileged op to a low-privilege caller (anonymous board password gate); job→poll flows; Script Execute permission. 스크립트, 백엔드 없이 서버 로직, 외부 API 호출, 웹훅 서명 검증, 동시성, 권한 위임, PDF 워터마크.
 ---
 
 # Weegloo — Script (declarative backend endpoints)
@@ -211,7 +211,7 @@ All reads take **`from`**: **`Current`** (live draft, what CMA/ACMA read; **defa
 
 | Option | On | Meaning |
 |--------|----|---------|
-| `fields` | Create/Update/Patch | field-key → value. With `locale` **set**, each value is a **bare** value for that locale; with `locale` **omitted**, each value must be an explicit **`{ "<locale>": value }` map** (a non-map ⇒ `400`). **Media** keys are fixed: `title`/`description` (scalar) and `file` = a `{ source, encoding }` ingest directive. `locale → null` **deletes** that bucket. |
+| `fields` | Create/Update/Patch | field-key → value. With `locale` **set**, each value is a **bare** value for that locale; with `locale` **omitted**, each value must be an explicit **`{ "<locale>": value }` map** (a non-map ⇒ `400`). **Media** keys are fixed: `title`/`description` (scalar) and `file` = a `{ source, encoding, transformations? }` ingest directive. `locale → null` **deletes** that bucket. |
 | `locale` | Create/Update/Patch | literal code **or** value expression. Omitting it does **not** default to the space locale. |
 | `version` | Update/Patch/Publish/Unpublish/Archive/Unarchive | **optimistic lock** (→ Int): the write applies only if `sys.version` matches; a mismatch aborts with a catchable conflict error. Omit ⇒ no check. |
 | `publish` | Create/Update/Patch | **default `true`** — publish after the write so CDA/ACDA deliver it; `false` keeps a draft. |
@@ -223,6 +223,17 @@ ones). **`url`** makes the worker fetch the bytes **outside the 10 MiB `Http` ca
 decodes the value; **`Binary` is rejected (`400`)**. An ingest **may** sit inside a `Loop` body /
 `onEach`. A Media still **processing** cannot be updated/patched/deleted and will not publish
 (`weegloo-media-lifecycle`).
+
+**Media transformations** — a `file` directive may carry
+`"transformations": [ { "type": "PdfWatermark", "text": "…" } ]` (optional `"color": "#RRGGBB"`,
+default gray): the bytes are changed **in order** before upload, the source stays untouched, and the
+result is the new file — a buyer's email stamped on a purchased PDF is a Script ingest, **never** a
+browser-side edit. `PdfWatermark` draws `text` diagonally across every page at 30% opacity. `text` is
+**one line of WinAnsi characters (no Korean / CJK), 1–64 chars**: a literal is refused at save
+(`WGL400096` / `WGL400086`); a text holding `{ /ptr }` is judged only once resolved and **fails the
+run `400`** — keep its fixed part short. A non-PDF or encrypted source fails the run `422` and nothing
+is written. **Read `references/transformations.md`** before writing one: the limits per stage, what
+is drawn, and the buyer-stamp recipe.
 
 **Ids are validated:** every `target.sys.id` / `contentType.sys.id` must match
 **`^[A-Za-z0-9_-]{1,64}$`** — an unsubstituted placeholder (`"<POST_ID>"`), quotes or whitespace is
@@ -471,6 +482,9 @@ on create, alongside every **other non-optional locale** the space defines — `
   anonymous endpoint. Read it when the Script *receives* a signed request instead of sending one.
 - **`references/value-expressions.md`** — the `date` operator and operator edge cases. Read it
   whenever a date is compared, stored or read out of the payload.
+- **`references/transformations.md`** — `transformations` / `PdfWatermark` in full: what is drawn,
+  the `text` limits at save vs run time, run-time failures, the buyer-stamp recipe. Read it before
+  putting `transformations` on a Media `file` directive.
 
 ## Related
 
