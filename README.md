@@ -11,7 +11,7 @@ The Weegloo MCP server provides the following capabilities:
 
 ## Installation
 
-> **AI agent?** If a user gave you this README and asked you to install Weegloo, follow steps 1–5 in order. Run the commands yourself. Stop and ask the user only where a step says so. The `npx` installer is the whole installation: do not also install the plugin from a Claude Code or Cursor marketplace, or the skills end up installed twice.
+> **AI agent?** If a user gave you this README and asked you to install Weegloo, follow steps 1–5 in order. Run the commands yourself. Stop and ask the user only where a step says so.
 
 ### 1. Check Node.js
 
@@ -157,7 +157,7 @@ The MCP server tool groups are as follows:
 
 ## Repository layout
 
-**One plugin bundle** (`plugins/weegloo/`) holds `skills/`, `rules/` and the MCP configuration. The installer reads `plugins/weegloo/installer-manifest.json`, which is built from that bundle. The same bundle is also published as a Claude Code plugin (`plugins/weegloo/.claude-plugin/plugin.json`) and a Cursor plugin (`plugins/weegloo/.cursor-plugin/plugin.json`), listed by the marketplace catalogs at the repo root.
+**One plugin bundle** (`plugins/weegloo/`) holds `skills/`, `rules/` and the MCP configuration. The installer reads `plugins/weegloo/installer-manifest.json`, which is built from that bundle.
 
 ## Documentation & Resources
 
