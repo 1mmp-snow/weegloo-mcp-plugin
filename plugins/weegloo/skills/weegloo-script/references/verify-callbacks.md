@@ -26,9 +26,8 @@ received). Compared in **constant time**.
   authenticated as the empty message; only a blank **`secret`** — your own authoring — is a `400`.
 - **Sign `{ /rawPayload }`**, the body exactly as received. A re-serialized object has other bytes.
 - Cap: the **resolved** `value` is limited to **65,536 chars** (over ⇒ the statement fails, `422`).
-- ⚠️ `secret` has **no `secret: true` flag** (unlike an `Http` header): a signing secret written into
-  a Script is stored as authored and readable by anyone who can read that Script. Keep Script `Read`
-  off end-user roles.
+- **The signing secret is a private value:** declare it in `definition.secrets` and write
+  `"secret": "{ /secrets/<key> }"` — never the key itself (`SKILL.md` → *Secrets & auth*).
 
 ## `Hash` — unkeyed digest
 
@@ -36,8 +35,8 @@ Binds the **`String`**. `algorithm` (`MD5`|`SHA1`|`SHA256`|`SHA384`|`SHA512` —
 reproduce an older scheme), `value`, `encoding` (`Hex` **default**|`HexUpper`|`Base64`|`Base64Url`).
 
 For schemes that hash a shared secret *with* the message (`SHA256(fields… + sharedKey)`) — **there is
-no `secret` field**: write the secret into `value` in whatever position that scheme puts it, which is
-the only form that expresses every position. Compare with `$===`. Cap: the **resolved** `value` is
+no `secret` field**: write `{ /secrets/<key> }` into `value` in whatever position that scheme puts
+the shared key, which is the only form that expresses every position. Compare with `$===`. Cap: the **resolved** `value` is
 limited to **128 chars**.
 
 ## `Regex` — how text is taken apart
@@ -62,7 +61,7 @@ pointer: **`{ /<name>/1 }`**.
 // A header packing `t=<timestamp>,v1=<hex>`: unpack it, then verify over "{timestamp}.{body}"
 { "type": "Regex", "name": "sig", "mode": "Capture",
   "pattern": "^t=(\\d+),v1=([0-9a-f]{64})$", "value": "{ /headers/x-provider-signature }" },
-{ "type": "Signature", "name": "verified", "algorithm": "SHA256", "secret": "{ /vars/signingSecret }",
+{ "type": "Signature", "name": "verified", "algorithm": "SHA256", "secret": "{ /secrets/SIGNING_SECRET }",
   "value": "{ /sig/1 }.{ /rawPayload }", "expected": "{ /sig/2 }" },
 { "type": "If", "condition": { "!": "{ /verified }" },
   "then": [ { "type": "Return", "isError": true, "statusCode": 401, "value": "bad signature" } ] }

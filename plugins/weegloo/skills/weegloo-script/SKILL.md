@@ -55,7 +55,8 @@ locking); **privilege delegation** (a low-privilege caller performs ONE privileg
   "definition": {
     "method": "Post",                       // Get|Post|Put|Patch|Delete — execute must use this method
     "payloadSchema": { /* optional JSON Schema; the /execute payload is validated against it */ },
-    "statements": [ /* run top-to-bottom, stop on Return */ ]
+    "statements": [ /* run top-to-bottom, stop on Return */ ],
+    "secrets": [ /* private values the statements read as { /secrets/<key> } — Secrets & auth */ ]
   }
 }
 ```
@@ -73,7 +74,7 @@ locking); **privilege delegation** (a low-privilege caller performs ONE privileg
 Every statement carries a **`type`** (**always include it**) and an optional **`name`** binding its
 result as `{ /<name>/… }` for later statements. They run top-to-bottom and stop at `Return`. A
 binding `name` must match `^[a-zA-Z0-9_-]+$`, be unique, and not shadow a reserved root
-(`payload`/`rawPayload`/`headers`/`now`/`vars`/`error`).
+(`payload`/`rawPayload`/`headers`/`now`/`vars`/`error`/`secrets`).
 
 On resource statements **`resource`** is **`Content` | `Media`**, plus two narrow cases:
 **`ServiceUser`** is read-only (read statements only; needs the `SETTING_SERVICE_LOGIN` permission)
@@ -102,8 +103,8 @@ is space-flat; the by-id statements carry a `target` instead.
 
 ### `Http` — call an external API
 
-`method`, `url` (value expression), `headers` (`[{ key, value, secret?: bool }]` — **`secret: true`**
-⇒ stored **encrypted**), `body`, `timeoutMs` (omitted ⇒ **30s**, cap **60s**), `retry` (default `0`,
+`method`, `url` (value expression), `headers` (`[{ key, value }]` — a credential is written as
+`"Bearer { /secrets/<key> }"`, *Secrets & auth*), `body`, `timeoutMs` (omitted ⇒ **30s**, cap **60s**), `retry` (default `0`,
 cap **2**; retries only on status ≥ 400), `ignoreStatusCode` (default `false`), `responseType`
 (**`json`** default | `text`). Binds **`{ status, body }`**.
 
@@ -239,6 +240,7 @@ Any string value may embed a pointer. Roots:
 | `/now` | when the run started: **`/now/seconds`**, **`/now/millis`**, **`/now/iso`** |
 | `/<name>` | an earlier statement's result — `{ /resp/body/... }`, `{ /post/sys/id }` |
 | `/vars/<name>` | a `SetVar` variable |
+| `/secrets/<key>` | a value declared in `definition.secrets` — exactly one key deep (*Secrets & auth*) |
 | `/error` | only inside a `Try` `catch` — `{ /error/message }` |
 
 - **Single pointer** preserves the source type (a number stays a number); a **mixed template**
@@ -300,10 +302,33 @@ loop-retry; surface the upgrade path.
 
 ## Secrets & auth
 
-- Put API keys in **`Http` `headers`** with **`"secret": true`** — encrypted at rest. Never in
-  `payload` or Content fields. ⚠️ **`Signature.secret` has no such flag** — a signing secret written
-  into a Script is stored as authored and readable by anyone who can read that Script, so keep Script
-  `Read` off end-user roles.
+- **Every private, non-generic value goes in `definition.secrets` and is read as
+  `{ /secrets/<key> }`** — a PG or third-party API secret key, a webhook signing secret, a precomputed
+  `Basic …` credential, an OAuth client secret. **Never write one literally into a statement** — not
+  in an `Http` `url` (query string included), `headers` or `body`, not in `Signature.secret` or
+  `Hash.value`, not in a `SetVar` — and never in `payload` or Content fields. Published **test keys**
+  go there too, so going live changes one secret value, not the statements.
+
+  ```jsonc
+  "secrets": [ { "key": "LLM_API_KEY", "value": "sk-…", "description": "LLM provider API key" } ],
+  // in a statement:
+  "headers": [ { "key": "Authorization", "value": "Bearer { /secrets/LLM_API_KEY }" } ]
+  ```
+
+  - `key` 1–64 chars, `^[a-zA-Z0-9_-]+$`, unique (**`WGL400094`**); `value` 1–4096 chars, a
+    **static string** — a `{ /… }` inside it is not resolved (**`WGL400086`**); `description`
+    required, `""` allowed, ≤ 128 chars. At most **20** secrets (**`WGL400095`**).
+  - A reference names exactly one declared key — `{ /secrets }`, `{ /secrets/<key>/x }` or an
+    undeclared key is **rejected at save** (**`WGL400093`**). It works wherever a value expression
+    does, including inside a mixed string.
+  - Values are **encrypted at rest**, but reading the Script (`GetOneScript`, or a Webhook /
+    Scheduler `include`) returns them **in plaintext** to anyone with Script `Read` — keep Script
+    `Read` off end-user roles. **PUT is a full replacement: resend `secrets` on every update**, or
+    they are deleted.
+  - A decrypted value is only as private as the statements keep it: never `Return` it, `SetVar` or
+    store it, or send it anywhere but the API it belongs to.
+  - A Script installed from a MarketApp arrives with every secret value set to `******` — fill in
+    the real values before it can call out.
 - **Execute authorization:** only the caller's **Script `Execute`** permission is checked at
   `/execute` (missing ⇒ **`403`**); on `/execute/anonymous` nothing is checked. The resource
   operations *inside* run with the **Script author's authority, delegated** — **not** re-validated per
@@ -343,7 +368,7 @@ it. One Script does the whole thing.
    caller's wallet by `where: { "createdBy": ":self" }` on **`advanced: false`**, `Return` if it is
    `null`, `ResourceRead` it by that id, `If` balance check, a version-locked `ResourcePatch` to
    deduct — and put the `Http` in a `Try` whose `catch` refunds); `Http` POSTs to the provider (key
-   in a `secret` header); `ParseJson` when the provider nests JSON inside a string; writes the result
+   read from `{ /secrets/<key> }`); `ParseJson` when the provider nests JSON inside a string; writes the result
    back with `ResourceCreate`/`ResourcePatch` (a text field, or a **Media** ingest for images);
    `Return`s a small summary.
    ⚠️ **The balance check holds only if the caller's role has no `Create`, `Edit` or `All` on the
@@ -405,12 +430,13 @@ it. One Script does the whole thing.
 {
   "name": "gen", "definition": { "method": "Post", "statements": [
     { "type": "Http", "method": "POST", "url": "https://api.llm.com/v1/gen",
-      "headers": [ { "key": "Authorization", "value": "Bearer sk-…", "secret": true } ],
+      "headers": [ { "key": "Authorization", "value": "Bearer { /secrets/LLM_API_KEY }" } ],
       "body": { "prompt": "{ /payload/fields/prompt }" }, "timeoutMs": 15000, "name": "resp" },
     { "type": "ResourceCreate", "resource": "Content", "contentType": { "sys": { "id": "ct_result" } },
       "fields": { "text": { "en-US": "{ /resp/body/choices/0/message/content }" } }, "name": "out" },
     { "type": "Return", "value": { "ok": true, "id": "{ /out/sys/id }" } }
-  ] }
+  ],
+  "secrets": [ { "key": "LLM_API_KEY", "value": "sk-…", "description": "LLM provider API key" } ] }
 }
 ```
 

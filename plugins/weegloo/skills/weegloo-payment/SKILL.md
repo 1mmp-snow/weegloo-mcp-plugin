@@ -269,8 +269,8 @@ every value (`weegloo-script` → `Http`).
 { "type": "Http", "name": "session", "method": "POST",
   "url": "https://api.stripe.com/v1/checkout/sessions",
   "headers": [
-    { "key": "Authorization", "value": "Bearer sk_test_BQokikJOvBiI2HlWgH4olfQ2", "secret": true },
-    { "key": "Content-Type", "value": "application/x-www-form-urlencoded", "secret": false } ],
+    { "key": "Authorization", "value": "Bearer { /secrets/STRIPE_SECRET_KEY }" },
+    { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
   "body": {
     "mode": "payment",
     "client_reference_id": "{ /payload/orderId }",
@@ -318,7 +318,11 @@ every value (`weegloo-script` → `Http`).
   as JPY (and KRW), `500` = 500 — no multiplication. Store the minor-unit integer on the product row
   so the Script never has to convert, and check the zero-decimal list on the currencies page rather
   than assuming. Stripe also enforces a per-currency minimum (0.50 USD, 50 JPY, 50 KRW).
-- The secret key travels in `Authorization: Bearer …` with **`"secret": true`** — no base64, no Basic.
+- **The secret key is a Script secret**, never a literal in the statements. Declare it in this
+  Script's `definition.secrets` — `{ "key": "STRIPE_SECRET_KEY", "value":
+  "sk_test_BQokikJOvBiI2HlWgH4olfQ2", "description": "Stripe secret key" }` — and send it as
+  `Authorization: Bearer { /secrets/STRIPE_SECRET_KEY }`: no base64, no Basic. Secrets belong to one
+  Script, so the confirm Script (§6c) declares the same entry.
 
 ### 6c. Server — confirm the payment
 
@@ -341,7 +345,7 @@ This is **shape A**, and on Stripe it is a plain `GET` with no body:
 
 { "type": "Http", "name": "paid", "method": "GET",
   "url": "https://api.stripe.com/v1/checkout/sessions/{ /order/fields/stripeSessionId/en-US }",
-  "headers": [ { "key": "Authorization", "value": "Bearer sk_test_BQokikJOvBiI2HlWgH4olfQ2", "secret": true } ],
+  "headers": [ { "key": "Authorization", "value": "Bearer { /secrets/STRIPE_SECRET_KEY }" } ],
   "timeoutMs": 10000 },
 
 { "type": "If",
@@ -422,10 +426,11 @@ credentials list. **Never let a test-mode checkout pass for production-ready by 
    rather than `sk_live_…` (**https://dashboard.stripe.com/apikeys**, live mode). Stripe itself
    recommends this: `sk_live_` has unrestricted access to every API, while a restricted key can be
    scoped to just the Checkout Session write + read this integration performs — the same
-   least-privilege reasoning as `weegloo-delivery-access-token`. Nothing else in the Script changes;
-   `Authorization: Bearer rk_live_…` is the same header.
-2. **Re-register the webhook endpoint in live mode and take the new `whsec_…`** — signing secrets are
-   per-endpoint *and* per-mode, so the test secret silently fails every live delivery.
+   least-privilege reasoning as `weegloo-delivery-access-token`. Only the `STRIPE_SECRET_KEY`
+   secret's value changes, in both Scripts; the statements stay as they are.
+2. **Re-register the webhook endpoint in live mode and put the new `whsec_…` in the receiver
+   Script's `STRIPE_WEBHOOK_SECRET`** — signing secrets are per-endpoint *and* per-mode, so the test
+   secret silently fails every live delivery.
 3. **Delete the test-card panel** (§5) and any `4242…` left in the tree.
 4. Walk **https://docs.stripe.com/get-started/checklist/go-live**. The account needs business
    verification before it can accept real payments.
@@ -489,7 +494,8 @@ redirect is the ordinary case B covers.
 2. The Script **reads the order a Script created earlier** (`ResourceRead` / `ResourceFind` with
    `where: { "createdBy": ":self" }`) to learn the **expected amount** — priced from rows the
    buyer cannot write (§6b), never an order row the buyer wrote.
-3. `Http` GET/POST to the PG's verify endpoint, secret key in a header with **`"secret": true`**.
+3. `Http` GET/POST to the PG's verify endpoint, the secret key read from **`{ /secrets/<key> }`** in
+   a header.
 4. **Compare** the PG's reported amount + currency + order id against step 2. Mismatch ⇒ `Return`
    with `isError: true` and do not fulfil.
 5. `ResourcePatch` the order → paid, and only then grant the entitlement — **once**: a verify call
@@ -515,14 +521,13 @@ redirect is the ordinary case B covers.
 
 | Secret | Goes in |
 |---|---|
-| Stripe **secret key** (`sk_…`, for session creation and confirm) | `Http.headers` entry with **`"secret": true`** |
-| Stripe **webhook signing secret** (`whsec_…`) | `Signature.secret`, `secretEncoding: "Utf8"` |
+| Stripe **secret key** (`sk_…`, for session creation and confirm) | each of those Scripts' `definition.secrets` (`STRIPE_SECRET_KEY`), sent as `Authorization: Bearer { /secrets/STRIPE_SECRET_KEY }` |
+| Stripe **webhook signing secret** (`whsec_…`) | the receiver Script's `definition.secrets` (`STRIPE_WEBHOOK_SECRET`), read by `Signature.secret`, `secretEncoding: "Utf8"` |
 | Stripe **publishable key** (`pk_…`) | browser code — this one is safe to expose |
 | Callback **auth token** (token path, non-Stripe providers) | the `SpaceAccessToken` you register with the PG, not in the Script |
 
-⚠️ **`Http.headers` `secret: true` is the encrypted-at-rest slot; `Signature.secret` has no
-equivalent** — a signing secret is stored as authored and readable by anyone who can read that
-Script, so keep Script `Read` off end-user roles.
+⚠️ **Reading a Script returns its `secrets` in plaintext** to anyone with Script `Read`, so keep
+Script `Read` off end-user roles (`weegloo-script` → *Secrets & auth*).
 
 ## Never
 
@@ -539,7 +544,7 @@ Script, so keep Script `Read` off end-user roles.
 - **Never leave a `pk_test_…` / `sk_test_…` / `whsec_…` key, or the test-card panel, in the tree once
   live credentials exist** — going live means removing the test path, not layering over it (§8).
 - **Never put the secret key in client code.** The publishable key is the only Stripe key the browser
-  may see; `sk_…` lives in `Http.headers` with `"secret": true`.
+  may see; `sk_…` lives in the Script's `definition.secrets`.
 - **Never send Stripe parameters in the URL.** They belong in a form-urlencoded `body`, which the
   engine percent-encodes; a value interpolated into `url` is not encoded, so free text there
   corrupts the request (§6b).

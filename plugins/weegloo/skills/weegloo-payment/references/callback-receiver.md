@@ -83,6 +83,7 @@ Stripe-Signature: t=1492774577,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56
 - The signed message is **`{timestamp}.{raw body}`** — a literal period between the two.
 - **HMAC-SHA256**, keyed with the endpoint's **`whsec_…` secret used verbatim**, prefix included.
   Do not strip `whsec_`, and do not hex- or base64-decode it: `secretEncoding` stays **`Utf8`**.
+  Declare it in the receiver Script's `definition.secrets` as `STRIPE_WEBHOOK_SECRET`.
 - The code is **hex**.
 
 ```jsonc
@@ -94,7 +95,7 @@ Stripe-Signature: t=1492774577,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56
   "then": [ { "type": "Return", "isError": true, "statusCode": 401, "value": "bad signature" } ] },
 
 { "type": "Signature", "name": "verified", "algorithm": "SHA256",
-  "secret": "whsec_…", "secretEncoding": "Utf8",
+  "secret": "{ /secrets/STRIPE_WEBHOOK_SECRET }", "secretEncoding": "Utf8",
   "value": "{ /sig/1 }.{ /rawPayload }",
   "expected": "{ /sig/2 }" },
 
@@ -128,7 +129,7 @@ provider's exact form, case included, or its `$===` compare fails every delivery
 | Legacy `MD5(…)` digest | `Hash` with `algorithm: "MD5"`, `encoding` matching the provider's form |
 | Asymmetric signature (RSA/ECDSA), or a scheme requiring a fetched certificate | **not covered** — `Signature` is keyed-hash only; use shape A instead |
 
-`Hash` takes the secret inside `value`, wherever that scheme puts it, and caps the resolved `value` at
+`Hash` takes the secret inside `value` as `{ /secrets/<key> }`, wherever that scheme puts it, and caps the resolved `value` at
 **128 characters**, checked when the statement runs, not at save (over ⇒ it fails with `422`) — so
 size it by the longest value every field and the key can take, not by one test delivery. A scheme
 that can exceed it is **not covered**, like the asymmetric row: `Signature` is an HMAC, a different

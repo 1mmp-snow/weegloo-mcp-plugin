@@ -286,8 +286,7 @@ amount comparison, same write-back:
 { "type": "Try", "body": [
     { "type": "Http", "method": "POST", "url": "https://api.tosspayments.com/v1/payments/confirm",
       "headers": [
-        { "key": "Authorization",
-          "value": "Basic dGVzdF9nc2tfZG9jc19PYVB6OEw1S2RtUVhrelJ6M3k0N0JNdzY6", "secret": true },
+        { "key": "Authorization", "value": "Basic { /secrets/TOSS_BASIC_AUTH }" },
         { "key": "Content-Type", "value": "application/json" } ],
       "body": { "paymentKey": "{ /payload/paymentKey }", "orderId": "{ /payload/orderId }",
                 "amount": "{ /order/fields/amount/en-US }" },
@@ -298,9 +297,7 @@ amount comparison, same write-back:
 { "type": "Try", "body": [
     { "type": "Http", "name": "payment", "method": "GET",
       "url": "https://api.tosspayments.com/v1/payments/{ /payload/paymentKey }",
-      "headers": [
-        { "key": "Authorization",
-          "value": "Basic dGVzdF9nc2tfZG9jc19PYVB6OEw1S2RtUVhrelJ6M3k0N0JNdzY6", "secret": true } ],
+      "headers": [ { "key": "Authorization", "value": "Basic { /secrets/TOSS_BASIC_AUTH }" } ],
       "timeoutMs": 5000, "ignoreStatusCode": true } ],
   "catch": [ { "type": "Return", "isError": true, "statusCode": 503, "value": "retry" } ] },
 
@@ -331,11 +328,13 @@ amount comparison, same write-back:
   widget amount anyway, Toss refuses this confirm, because it differs from the amount the buyer
   authenticated; handle that like its other failure codes (below). Nothing is charged — approval,
   not authentication, is what debits.
-- **Precompute the `Basic` value.** A Script cannot base64-encode an arbitrary string, so encode
-  `secretKey + ":"` at authoring time and store the finished `Basic …` string with `"secret": true`,
-  the same value in both `Http` statements: a refused 결제 조회 leaves an approved payment
-  `pending`. The literal above is exactly `base64("test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6:")` —
-  recompute it if you use a different key.
+- **Precompute the `Basic` value and keep it a Script secret.** A Script cannot base64-encode an
+  arbitrary string, so encode `secretKey + ":"` at authoring time and declare the result in the
+  Script's `definition.secrets` — `{ "key": "TOSS_BASIC_AUTH", "value":
+  "dGVzdF9nc2tfZG9jc19PYVB6OEw1S2RtUVhrelJ6M3k0N0JNdzY6", "description": "Toss secret key, base64 of
+  key + ':'" }` — never as a literal in the statements. Both `Http` statements read the same secret:
+  a refused 결제 조회 leaves an approved payment `pending`. That value is exactly
+  `base64("test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6:")` — recompute it if you use a different key.
 - **Store `paymentKey`** — Toss's, from 결제 조회, not the payload's — beside the order's `orderId`;
   they are what later lookup and cancellation need.
 - **Grant once.** A rerun — a reloaded success page, a retried call — must not pass the check a
@@ -453,8 +452,8 @@ credentials list. **Never let a test-key checkout pass for production-ready by s
 
 1. Replace the client key in the browser and the secret key behind the confirm Script with the
    결제위젯 pair (`…_gck_…` / `…_gsk_…`) from their own 개발자센터, and **recompute the precomputed
-   `Basic …` value** (§4) from the new secret key, in both of the confirm Script's `Http`
-   statements.
+   `Basic …` value** (§4) from the new secret key into the confirm Script's `TOSS_BASIC_AUTH` secret
+   — the statements stay as they are.
 2. Delete every `test_gck_docs_…` / `test_gsk_docs_…` string left in the tree.
 3. The account-only work is now reachable. **If their keys offer 가상계좌** — a store's own test key
    issued after the 전자결제 contract does; the documentation keys never did — build the 가상계좌
@@ -517,7 +516,8 @@ as a trigger only and asks Toss's 결제 조회 API before it writes — the one
 2. The Script **reads the order a Script created earlier** (`ResourceRead` / `ResourceFind` with
    `where: { "createdBy": ":self" }`) to learn the **expected amount** — priced from records the
    buyer cannot write (*The order Script*); an order the buyer wrote hands their own number back.
-3. `Http` GET/POST to the PG's verify endpoint, secret key in a header with **`"secret": true`**.
+3. `Http` GET/POST to the PG's verify endpoint, the secret key read from **`{ /secrets/<key> }`** in
+   a header.
 4. **Compare** the PG's reported amount + currency + order id against step 2. Mismatch ⇒ `Return`
    with `isError: true` and do not fulfil.
 5. `ResourcePatch` the order → paid, and only then grant the entitlement — **once**: a verify call
@@ -543,15 +543,14 @@ as a trigger only and asks Toss's 결제 조회 API before it writes — the one
 
 | Secret | Goes in |
 |---|---|
-| PG **API/secret key** (for confirm and inquiry calls) | `Http.headers` entry with **`"secret": true`** |
+| PG **API/secret key** (for confirm and inquiry calls) | each calling Script's `definition.secrets` (Toss: `TOSS_BASIC_AUTH`), sent as `Basic { /secrets/TOSS_BASIC_AUTH }` |
 | Toss's per-payment 가상계좌 `secret` (in the Payment object the confirm and 결제 조회 return) | **nowhere** — the deposit receiver asks Toss instead (§4) |
-| **Webhook signing secret** (shape B) | `Signature.secret` / inside `Hash.value` — `references/callback-receiver.md` B-2 / B-3 |
+| **Webhook signing secret** (shape B) | the receiver Script's `definition.secrets`, read by `Signature.secret` / inside `Hash.value` — `references/callback-receiver.md` B-2 / B-3 |
 | Callback **auth token** (token path, shape B) | the `SpaceAccessToken` you register with the PG, not in the Script — `references/callback-receiver.md` B-1 |
 
-⚠️ **`Http.headers` `secret: true` is the encrypted-at-rest slot; `Signature.secret` has no
-equivalent** — a signing secret written into a Script is stored as authored and readable by anyone
-who can read that Script, so keep Script `Read` off end-user roles, and treat the signing secret as
-compromised if an end-user role can already read it.
+⚠️ **Reading a Script returns its `secrets` in plaintext** to anyone with Script `Read`, so keep
+Script `Read` off end-user roles, and treat a secret as compromised if an end-user role can already
+read that Script (`weegloo-script` → *Secrets & auth*).
 
 ## Never
 
@@ -567,7 +566,7 @@ compromised if an end-user role can already read it.
 - **Never leave a `test_gck_…` / `test_gsk_…` key in the tree once their own credentials exist** —
   going live or replacing a provider means removing the test path, not layering over it (§6).
 - **Never put a secret key, or its `Basic …` header, in client code.** The client key is the only Toss
-  key the browser may see; the secret key lives in `Http.headers` with `"secret": true`.
+  key the browser may see; the secret key lives in the Script's `definition.secrets`.
 - **Never trust a client-reported amount, currency or status — a row the buyer wrote is
   client-reported.** The amount comes from *The order Script*; the PG's response says what was
   paid, and must equal it. The buyer's role never writes the order or `product` type.

@@ -70,7 +70,7 @@ so the call to Toss *is* its verification — bounded inside Toss's timeout in t
 
 ```jsonc
 { "type": "Signature", "name": "verified", "algorithm": "SHA256",
-  "secret": "<webhook signing secret>",
+  "secret": "{ /secrets/WEBHOOK_SIGNING_SECRET }",
   "value": "{ /rawPayload }",
   "expected": "{ /headers/x-provider-signature }" },
 
@@ -78,6 +78,8 @@ so the call to Toss *is* its verification — bounded inside Toss's timeout in t
   "then": [ { "type": "Return", "isError": true, "statusCode": 401, "value": "bad signature" } ] }
 ```
 
+- **The signing secret lives in the receiver Script's `definition.secrets`** — `WEBHOOK_SIGNING_SECRET`
+  above — never as a literal in the statement.
 - **Sign `{ /rawPayload }`** — the caller's body exactly as received. A re-serialized object has
   different bytes and will never match.
 - Header names arrive **lower-cased**, whatever case the provider sent: `{ /headers/x-provider-signature }`.
@@ -120,7 +122,7 @@ is `"{timestamp}.{body}"`; adapt the pattern and the assembled message to the sc
   "value": "{ /headers/x-provider-signature }" },
 
 { "type": "Signature", "name": "verified", "algorithm": "SHA256",
-  "secret": "<the provider's signing secret>",
+  "secret": "{ /secrets/WEBHOOK_SIGNING_SECRET }",
   "value": "{ /sig/1 }.{ /rawPayload }",
   "expected": "{ /sig/2 }" },
 ```
@@ -129,13 +131,13 @@ is `"{timestamp}.{body}"`; adapt the pattern and the assembled message to the sc
 
 ```jsonc
 { "type": "Hash", "name": "expected", "algorithm": "SHA256", "encoding": "Hex",
-  "value": "{ /payload/merchantId }{ /payload/timestamp }{ /payload/orderId }{ /payload/amount }<sharedKey>" },
+  "value": "{ /payload/merchantId }{ /payload/timestamp }{ /payload/orderId }{ /payload/amount }{ /secrets/SHARED_KEY }" },
 
 { "type": "If", "condition": { "!==": [ "{ /expected }", "{ /payload/signData }" ] },
   "then": [ { "type": "Return", "isError": true, "statusCode": 401, "value": "bad signature" } ] }
 ```
 
-`Hash` takes the secret inside `value`, wherever that scheme puts it, and caps the resolved `value` at
+`Hash` takes the secret inside `value` as `{ /secrets/<key> }`, wherever that scheme puts it, and caps the resolved `value` at
 **128 characters**, checked when the statement runs, not at save (over ⇒ it fails with `422`) — so
 size it by the longest value every field and the key can take, not by one test delivery. A scheme
 that can exceed it is **not covered**, like the asymmetric row: `Signature` is an HMAC, a different
@@ -191,8 +193,9 @@ about where a `secret` may live, which the page cannot see.
   `paymentKey` `SKILL.md` §4 stored when the account was issued. The notification carries none, and
   Toss's key reference (`…/reference/using-api/api-keys.md`) lists `paymentKey로 결제 조회` for the
   결제위젯 secret key but not `orderId로 결제 조회`.
-- **The same `Basic …` header as the confirm Script**, with `"secret": true` — by now the user's own
-  key: 가상계좌, and so this receiver, exists only on their own keys (`SKILL.md` §6).
+- **The same `Basic …` header as the confirm Script**, from the same `TOSS_BASIC_AUTH` secret
+  declared in this receiver's own `definition.secrets` — by now the user's own key: 가상계좌, and so
+  this receiver, exists only on their own keys (`SKILL.md` §6).
 
 ```jsonc
 { "type": "If", "condition": { "!": "{ /payload/orderId }" },
@@ -217,8 +220,7 @@ about where a `secret` may live, which the page cannot see.
 
 { "type": "Http", "name": "toss", "method": "GET",
   "url": "https://api.tosspayments.com/v1/payments/{ /order/fields/paymentKey/en-US }",
-  "headers": [ { "key": "Authorization", "value": "Basic <same value as the confirm Script>",
-                 "secret": true } ],
+  "headers": [ { "key": "Authorization", "value": "Basic { /secrets/TOSS_BASIC_AUTH }" } ],
   "timeoutMs": 5000, "ignoreStatusCode": true },
 
 { "type": "If", "condition": { "or": [
