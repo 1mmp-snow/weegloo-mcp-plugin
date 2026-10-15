@@ -83,8 +83,8 @@ The agent loads MCP servers, skills and rules only when it starts, so **restart 
 |---|---|
 | Claude Code | In a new session run `/mcp`, select **`weegloo`** → **Authenticate**, and sign in in the browser that opens. |
 | Codex | Run `codex mcp login weegloo` in a terminal and sign in in the browser that opens. |
-| Cursor | **Cursor Settings → MCP** → `weegloo` → **Connect**, and sign in in the browser. |
-| Antigravity | Open its **MCP server settings** → `weegloo` → **Connect**, and sign in in the browser. |
+| Cursor | Click **Customize** at the top left → **MCPs** → `weegloo`, turn on the **User** toggle, click **Authenticate**, and sign in in the browser that opens. |
+| Antigravity | Run `agy`, enter `/mcp`, select `weegloo` → **Authenticate**, and sign in in the browser that opens. Then paste the **Code** shown in the browser back into Antigravity and press Enter. |
 | Android Studio | Nothing to do. The token from step 2 is already configured. |
 
 The second server, `weegloo-upload`, needs no sign-in. It gets its upload token through `weegloo`.
