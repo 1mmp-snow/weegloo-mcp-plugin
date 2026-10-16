@@ -189,8 +189,8 @@ already made stay made. Split work that cannot fit into runs that can (the job p
 ## Save-time validation (what is rejected before the Script ever runs)
 
 - `contentType` missing on a Content `ResourceCreate` / `Find` / `ForEach` / `Count`.
-- A resource statement other than `ResourceCount` on `resource: "ContentType"`, or a mutation on
-  `resource: "ServiceUser"`.
+- A resource statement other than `ResourceCount` on `resource: "ContentType"`, or a mutation other
+  than `ResourceUpdate`/`ResourcePatch` on `resource: "ServiceUser"`.
 - A `Loop` `maxIterations` or `ResourceForEach` `limit` above **10,000**.
 - An empty **`ResourceForEach` `onEach`** block (empty `If`/`Loop`/`Try`/`Parallel` bodies are fine).
 - A binding **`name`** that is not `^[a-zA-Z0-9_-]+$` (no `/`, `~`, dots, spaces or other
