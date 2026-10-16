@@ -23,7 +23,7 @@ description: Weegloo CMA/ACMA updates - prefer HTTP PATCH with RFC 6902 JSON Pat
 - **Request header (mandatory):** set **`Content-Type: application/json-patch+json`** (RFC 6902 registration). Do not send a JSON Patch body with a generic `application/json` content type.
 - The format follows **[RFC 6902 - JSON Patch](https://www.rfc-editor.org/rfc/rfc6902)**:
   - Body is a **JSON array** of operations.
-  - Each operation has an **`op`**: `add`, `remove`, `replace`, `move`, `copy`, or `test`.
+  - Each operation has an **`op`**: `add`, `remove`, `replace`, `move`, or `copy`. `test` is part of RFC 6902 but is not supported on Weegloo.
   - **`path`** (and **`from`** where required) use **JSON Pointer** ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)).
 - Confirm the **`PATCH`** URL and any extra headers (e.g. version) per resource in **OpenAPI** (canonical API doc URLs live only in **`weegloo-api-endpoints`** - do not duplicate them here).
 
