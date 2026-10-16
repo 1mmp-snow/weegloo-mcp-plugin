@@ -23,7 +23,7 @@ description: Weegloo CMA/ACMA updates - prefer HTTP PATCH with RFC 6902 JSON Pat
 - **Request header (mandatory):** set **`Content-Type: application/json-patch+json`** (RFC 6902 registration). Do not send a JSON Patch body with a generic `application/json` content type.
 - The format follows **[RFC 6902 - JSON Patch](https://www.rfc-editor.org/rfc/rfc6902)**:
   - Body is a **JSON array** of operations.
-  - Each operation has an **`op`**: `add`, `remove`, `replace`, `move`, `copy`, or `test`.
+  - Each operation has an **`op`**: `add`, `remove`, `replace`, `move`, or `copy`. `test` is part of RFC 6902 but is not supported on Weegloo.
   - **`path`** (and **`from`** where required) use **JSON Pointer** ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)).
 - Confirm the **`PATCH`** URL and any extra headers (e.g. version) per resource in **OpenAPI** (canonical API doc URLs live only in **`weegloo-api-endpoints`** - do not duplicate them here).
 
@@ -37,8 +37,8 @@ description: Weegloo CMA/ACMA updates - prefer HTTP PATCH with RFC 6902 JSON Pat
 ## Practical notes
 
 - Apply **`X-Weegloo-Version`** (or the project’s version header) when the API requires optimistic concurrency - unchanged from other CMA write operations.
-- For **field/locale paths** in pointers or patch targets, follow the **same locale and `fields.*` shapes** as in GET/PUT examples in OpenAPI.
-- **Agents:** use **MCP** `cma_*` / `acma_*` tools when the user asks for console-style operations; use this skill when writing or reviewing **HTTP client code** that calls CMA/ACMA directly. The same PATCH-over-PUT default applies to those tool calls — a partial edit is **`cma_PatchOneContentOfContentType`** / **`cma_PatchOneContentType`** / **`cma_PatchOneMedia`**, not the matching `cma_UpdateOne*`.
+- A `path` is a JSON Pointer that mirrors the body, e.g. `/fields/title/en-US` on Content or Media.
+- **Agents:** use **MCP** `cma_*` tools when the user asks for console-style operations; use this skill when writing or reviewing **HTTP client code** that calls CMA/ACMA directly. The same PATCH-over-PUT default applies to those tool calls — a partial edit is **`cma_PatchOneContentOfContentType`** / **`cma_PatchOneContentType`** / **`cma_PatchOneMedia`**, not the matching `cma_UpdateOne*`.
 
 ## Related
 
