@@ -130,7 +130,7 @@ Combine with **`select`** from section 1 when you do not need full documents.
 
 ## 4. `sys.version` before `PATCH` or `PUT`
 
-Updates on **CMA** / **ACMA** (and similar) usually require the **current** **`sys.version`** so the server can enforce **optimistic concurrency** (e.g. via **`X-Weegloo-Version`** or the contract in OpenAPI-see **`weegloo-cma-json-patch`**). You only need **`sys.id`** and **`sys.version`** in the read phase; you do **not** need the **dedicated single-resource GET** for that.
+Updates on **CMA** usually require the **current** **`sys.version`** so the server can enforce **optimistic concurrency** (via **`X-Weegloo-Version`**; see **`weegloo-cma-json-patch`**); ACMA updates take no version. You only need **`sys.id`** and **`sys.version`** in the read phase; you do **not** need the **dedicated single-resource GET** for that.
 
 **Prefer the list endpoint** with a **tight `select`:**
 
