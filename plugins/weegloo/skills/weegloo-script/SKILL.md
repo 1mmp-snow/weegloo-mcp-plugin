@@ -77,7 +77,8 @@ binding `name` must match `^[a-zA-Z0-9_-]+$`, be unique, and not shadow a reserv
 (`payload`/`rawPayload`/`headers`/`now`/`vars`/`error`/`secrets`).
 
 On resource statements **`resource`** is **`Content` | `Media`**, plus two narrow cases:
-**`ServiceUser`** is read-only (read statements only; needs the `SETTING_SERVICE_LOGIN` permission)
+**`ServiceUser`** takes the read statements plus `ResourceUpdate`/`ResourcePatch` of its
+`roleOverride` and `enableLogin` — nothing else (needs the `SETTING_SERVICE_LOGIN` permission)
 and **`ContentType`** is **countable only** (`ResourceCount`; anything else is rejected at save).
 
 **A Content statement that does not address its target by id must name the ContentType it works
