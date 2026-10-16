@@ -19,7 +19,7 @@ a provider sign-in screen. Do this **before the first sign-in attempt**.
 
 - **Creating the `ServiceLogin` now** — put `allowedCallbackUrls` in the create body.
 - **A `ServiceLogin` already exists** — the usual case, because the web product shipped first. **You
-  must update it.** Prefer **`cma_PatchOneServiceLogin`** to append one entry.
+  must update it.**
   **`cma_UpdateOneServiceLogin` is a full replacement**, and `allowedCallbackUrls` and
   `approvalRequired` are the two fields that **default when omitted** — a PUT that leaves them out
   silently clears the callback list and turns approval off. Resend the whole resource.
