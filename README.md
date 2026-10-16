@@ -44,6 +44,8 @@ Nothing else needs to be installed beforehand. `npx` comes with Node.js, and the
 
 Android Studio is always installed into the current project. Run its command from the project root.
 
+**Xcode only: `--host xcode`.** If the user wants to use you (Claude Code or Codex) inside Xcode, add `--host xcode` and run the command from the Xcode project root. Xcode installs are always project-scoped; the installer sets `--location project` by itself.
+
 **Android Studio only: a Personal Access Token.** Android Studio's MCP server authenticates with a Weegloo Personal Access Token instead of a browser sign-in. Ask the user to create one at <https://console.weegloo.com/personal-access-token/connect?tool=weegloo-mcp> and pass it with `--token`. No other agent needs a token.
 
 ### 3. Run the installer
@@ -73,6 +75,9 @@ npx --yes weegloo@latest --yes --agent antigravity
 
 # Android Studio (from the project root, with the user's Personal Access Token)
 npx --yes weegloo@latest --yes --agent androidstudio --token <personal-access-token>
+
+# Claude Code inside Xcode (from the Xcode project root; use --agent codex for Codex)
+npx --yes weegloo@latest --yes --agent claude --host xcode
 ```
 
 ### 4. Restart the agent and sign in in the browser
@@ -86,6 +91,7 @@ The agent loads MCP servers, skills and rules only when it starts, so **restart 
 | Cursor | Click **Customize** at the top left → **MCPs** → `weegloo`, turn on the **User** toggle, click **Authenticate**, and sign in in the browser that opens. |
 | Antigravity | Run `agy`, enter `/mcp`, select `weegloo` → **Authenticate**, and sign in in the browser that opens. Then paste the **Code** shown in the browser back into Antigravity and press Enter. |
 | Android Studio | Nothing to do. The token from step 2 is already configured. |
+| Claude Code / Codex inside Xcode | Same as Claude Code / Codex above, but start the terminal session in the Xcode project folder. |
 
 The second server, `weegloo-upload`, needs no sign-in. It gets its upload token through `weegloo`.
 
