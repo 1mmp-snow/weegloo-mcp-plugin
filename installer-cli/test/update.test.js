@@ -1351,3 +1351,63 @@ test('runUpdate: country unknown → top level installs, a variants-only skill d
     assert.ok(lines.some((l) => l.includes('Skipped (country-only, no default version): 1 skill(s) (weegloo-postcode)')));
   });
 });
+
+// ── weegloo-upload launch spec (the one MCP edit an update makes) ───────────
+
+const BARE_UPLOAD = { command: 'npx', args: ['-y', 'weegloo-upload'], env: { UPLOAD_API_URL: 'x' } };
+
+function seedForUpload(mcpJson) {
+  seedClaude({
+    skills: ['weegloo-a'],
+    rules: ['weegloo-version', 'weegloo-terms-consent'],
+    record: {
+      skills: ['weegloo-a'],
+      rules: ['weegloo-version', 'weegloo-terms-consent'],
+      availableSkills: ['weegloo-a', 'weegloo-b', 'weegloo-brandnew'],
+      availableRules: ['weegloo-version', 'weegloo-terms-consent', 'weegloo-global-rules'],
+    },
+    // Same content version as the manifest: the upload launch is the only thing left to fix.
+    stamp: { last_check: '2026-01-01T00:00:00', version: 'v2', ref: 'develop' },
+  });
+  if (mcpJson != null) fs.writeFileSync('.mcp.json', mcpJson, 'utf-8');
+}
+
+test('runUpdate: a bare weegloo-upload launch is switched to @latest, nothing else in the config moves', async () => {
+  await inTmpProject(async () => {
+    const weegloo = { type: 'http', url: 'https://ai.weegloo.com/mcp' };
+    seedForUpload(JSON.stringify({ mcpServers: { weegloo, 'weegloo-upload': BARE_UPLOAD } }));
+    const lines = [];
+    const res = await runUpdate(
+      { update: true, agent: 'claude', scope: 'project', nonInteractive: true },
+      { loadResourcesFn: loadOk, fetchCountryFn: noCountry, log: (s) => lines.push(String(s)) }
+    );
+    assert.equal(res.status, 'updated');
+    const mcp = JSON.parse(fs.readFileSync('.mcp.json', 'utf-8')).mcpServers;
+    assert.deepEqual(mcp['weegloo-upload'].args, ['-y', 'weegloo-upload@latest']);
+    assert.deepEqual(mcp['weegloo-upload'].env, BARE_UPLOAD.env, 'env untouched');
+    assert.deepEqual(mcp.weegloo, weegloo, 'remote server untouched');
+    assert.ok(lines.some((l) => l.includes('weegloo-upload now launches weegloo-upload@latest')), lines.join('\n'));
+  });
+});
+
+test('runUpdate: no MCP config here → none is created', async () => {
+  await inTmpProject(async () => {
+    seedForUpload(null);
+    await runUpdate({ update: true, agent: 'claude', scope: 'project', nonInteractive: true }, { loadResourcesFn: loadOk, ...quiet });
+    assert.equal(fs.existsSync('.mcp.json'), false, 'an update never adds an MCP config');
+  });
+});
+
+test('runUpdate: an unreadable MCP config is left alone and reported, the update still completes', async () => {
+  await inTmpProject(async () => {
+    seedForUpload('{ not json');
+    const lines = [];
+    const res = await runUpdate(
+      { update: true, agent: 'claude', scope: 'project', nonInteractive: true },
+      { loadResourcesFn: loadOk, fetchCountryFn: noCountry, log: (s) => lines.push(String(s)) }
+    );
+    assert.equal(res.status, 'updated', 'skills/rules still update');
+    assert.equal(fs.readFileSync('.mcp.json', 'utf-8'), '{ not json');
+    assert.ok(lines.some((l) => l.includes('Could not check weegloo-upload')), lines.join('\n'));
+  });
+});

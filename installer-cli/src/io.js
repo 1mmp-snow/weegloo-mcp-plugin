@@ -181,6 +181,23 @@ export function listWeeglooRuleMarkers(contextFilePath) {
 }
 
 /**
+ * The npx spec the upload server is launched with. The `@latest` tag is what keeps it current:
+ * npx serves a BARE name from the first copy it ever cached under `_npx/<hash>/` and never asks
+ * the registry again (npm 9 libnpmexec: a `*` range matches any cached version), so a config
+ * written as `weegloo-upload` stayed on whatever version was current on that machine's first
+ * launch — a year-old 1.0.4 surviving every release, reconnect and re-auth. A tag spec makes
+ * npx resolve the tag against the registry on every launch and install the new version when it
+ * differs.
+ */
+export const UPLOAD_PACKAGE_SPEC = 'weegloo-upload@latest';
+
+/** The bare launch arg older installs wrote (and still sit in users' configs). */
+const BARE_UPLOAD_SPEC = 'weegloo-upload';
+
+/** The TOML table holding the codex upload server's `args` (its `.env` sub-table is separate). */
+const UPLOAD_TOML_SECTION = 'mcp_servers.weegloo-upload';
+
+/**
  * stdio launch command for the local `weegloo-upload` MCP server.
  *
  * With `injectPath` (set when the target runs inside a GUI host such as Xcode
@@ -198,6 +215,8 @@ export function listWeeglooRuleMarkers(contextFilePath) {
  * it through `cmd /c` runs the shim via the command interpreter, and `npx.cmd`
  * locates node.exe next to itself, so no PATH injection is needed there.
  *
+ * The package is launched as UPLOAD_PACKAGE_SPEC (`@latest`), never the bare name — see above.
+ *
  * @param {{ injectPath?: boolean, execPath?: string, platform?: NodeJS.Platform }} [opts] injectable for tests
  * @returns {{ command: string, args: string[], env: Record<string, string> }}
  */
@@ -207,7 +226,7 @@ export function uploadServerCommand({
   platform = process.platform,
 } = {}) {
   if (platform === 'win32') {
-    return { command: 'cmd', args: ['/c', 'npx', '-y', 'weegloo-upload'], env: {} };
+    return { command: 'cmd', args: ['/c', 'npx', '-y', UPLOAD_PACKAGE_SPEC], env: {} };
   }
 
   const env = {};
@@ -215,5 +234,91 @@ export function uploadServerCommand({
     const binDir = path.dirname(execPath);
     env.PATH = `${binDir}:/usr/bin:/bin`;
   }
-  return { command: 'npx', args: ['-y', 'weegloo-upload'], env };
+  return { command: 'npx', args: ['-y', UPLOAD_PACKAGE_SPEC], env };
+}
+
+/**
+ * Makes an EXISTING `weegloo-upload` MCP entry launch UPLOAD_PACKAGE_SPEC — the update flow's one
+ * MCP edit. Installs before the switch wrote the bare name, and an update otherwise never touches
+ * MCP config, so without this every existing install would stay pinned to its cached copy until
+ * a full reinstall.
+ *
+ * Deliberately narrow: only an args element that is EXACTLY the bare name is rewritten. No entry
+ * is created (an MCP-less install stays MCP-less), the `weegloo` server, `env` and any token are
+ * left alone, and an entry the user pinned on purpose (`weegloo-upload@1.5.0`, a local path) is
+ * not ours to change. The file is written only when something actually changes.
+ *
+ * Status: `absent` (no file / no entry), `current` (nothing bare to rewrite), `migrated`
+ * (rewritten), `failed` (unreadable / unparseable / unwritable — `error` says why).
+ *
+ * @param {{ kind: 'json'|'toml', file: string, container?: string } | null} mcp  same descriptor as stores.js
+ * @returns {{ status: 'absent'|'current'|'migrated'|'failed', file: string|null, error?: string }}
+ */
+export function pinUploadServerToLatest(mcp) {
+  const file = mcp?.file ?? null;
+  if (!file || !existsSync(file)) return { status: 'absent', file };
+  try {
+    const text = readFileSync(file, 'utf-8');
+
+    if (mcp.kind === 'toml') {
+      const lines = text.split(/\r?\n/);
+      const eol = text.includes('\r\n') ? '\r\n' : '\n';
+      let found = false;
+      let changed = false;
+      let inSection = false;
+      for (let i = 0; i < lines.length; i++) {
+        const header = lines[i].match(/^\s*\[([^\]]+)\]\s*$/);
+        if (header) {
+          inSection = header[1].trim() === UPLOAD_TOML_SECTION;
+          found ||= inSection;
+          continue;
+        }
+        if (!inSection || !/^\s*args\s*=/.test(lines[i])) continue;
+        const next = lines[i].replace(/(["'])weegloo-upload\1/g, `$1${UPLOAD_PACKAGE_SPEC}$1`);
+        if (next !== lines[i]) {
+          lines[i] = next;
+          changed = true;
+        }
+      }
+      if (!found) return { status: 'absent', file };
+      if (!changed) return { status: 'current', file };
+      writeFileSync(file, lines.join(eol), 'utf-8');
+      return { status: 'migrated', file };
+    }
+
+    const config = JSON.parse(text);
+    const entry = config?.[mcp.container ?? 'mcpServers']?.['weegloo-upload'];
+    if (!entry || typeof entry !== 'object') return { status: 'absent', file };
+    if (!Array.isArray(entry.args) || !entry.args.includes(BARE_UPLOAD_SPEC)) {
+      return { status: 'current', file };
+    }
+    entry.args = entry.args.map((arg) => (arg === BARE_UPLOAD_SPEC ? UPLOAD_PACKAGE_SPEC : arg));
+    writeFileSync(file, JSON.stringify(config, null, 2), 'utf-8');
+    return { status: 'migrated', file };
+  } catch (err) {
+    return { status: 'failed', file, error: err.message };
+  }
+}
+
+/**
+ * The line the update flow prints for a pinUploadServerToLatest result (uncoloured — callers
+ * style it), or null when there is nothing to say. `warn` marks the failure case.
+ *
+ * @param {{ status: string, file: string|null, error?: string }} result
+ * @returns {{ warn: boolean, text: string } | null}
+ */
+export function uploadPinNotice(result) {
+  if (result?.status === 'migrated') {
+    return {
+      warn: false,
+      text: `weegloo-upload now launches ${UPLOAD_PACKAGE_SPEC} (was stuck on its first cached copy) → ${result.file}; restart the agent to pick it up`,
+    };
+  }
+  if (result?.status === 'failed') {
+    return {
+      warn: true,
+      text: `Could not check weegloo-upload in ${result.file} (${result.error}). Make its args launch ${UPLOAD_PACKAGE_SPEC} by hand, or it stays on its first cached copy.`,
+    };
+  }
+  return null;
 }

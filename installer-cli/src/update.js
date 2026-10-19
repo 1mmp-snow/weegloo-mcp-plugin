@@ -16,7 +16,11 @@
  *    in prevAvailable but not selected means the user deselected it (respect that);
  *  - upstream-deleted items are pruned via the record diff in syncInstalledRecord;
  *  - core rules are always (re)added — the update notifier and the terms gate must survive;
- *  - MCP config is never touched (remote server is always current), so no token is needed;
+ *  - MCP config is touched in exactly ONE way, and never with a token: an existing `weegloo-upload`
+ *    entry that launches the bare package name is switched to `@latest` (io.js
+ *    pinUploadServerToLatest) — npx never re-resolves a bare name, so without this every install
+ *    made before the switch would stay on its first cached copy. Nothing is added; the remote
+ *    `weegloo` server is always current and is left alone;
  *  - the origins mapping recorded at install time is reapplied verbatim (docs/origins-mapping.md §5)
  *    — never taken from a flag (cli.js rejects --update --origins: environment changes reinstall);
  *  - the country recorded at install time is reused the same way (docs/country-filter.md) — no
@@ -57,6 +61,8 @@ import {
   listWeeglooSkillDirs,
   listWeeglooRuleFiles,
   listWeeglooRuleMarkers,
+  pinUploadServerToLatest,
+  uploadPinNotice,
 } from './io.js';
 import { upsertRuleInAgentsMd, removeRuleMarkers } from './codex.js';
 import { maintainAntigravityProjectRulesFile, RULE_LOADING_ID } from './antigravity.js';
@@ -418,6 +424,9 @@ export async function runUpdate(config, deps = {}) {
     }
   }
 
+  // ── weegloo-upload launch spec: bare name → @latest (the one MCP edit an update makes) ────────
+  const upload = pinUploadServerToLatest(store.mcp);
+
   // ── Prune upstream-deleted / stale entries + persist record & stamp ─────────────────────────
   const { removedSkills, removedRules } = syncInstalledRecord({
     scope,
@@ -464,11 +473,15 @@ export async function runUpdate(config, deps = {}) {
   };
   log(line('Skills', plan.addSkillIds, effectiveManageSkills ? plan.newSkillIds : [], effectiveManageSkills ? restoredSkills : [], removedSkills, !effectiveManageSkills));
   log(line('Rules', plan.addRuleIds, effectiveManageRules ? plan.newRuleIds : [], effectiveManageRules ? restoredRules : [], removedRules, !effectiveManageRules));
+  const uploadNotice = uploadPinNotice(upload);
+  if (uploadNotice) {
+    log(uploadNotice.warn ? chalk.yellow('  ⚠  ') + uploadNotice.text : chalk.green(`  ✔ ${uploadNotice.text}`));
+  }
   if (prev.availableSkills.length === 0 && prev.availableRules.length === 0) {
     log(chalk.dim('  - First update with the new tracking: catalog snapshot recorded — newly added items will auto-install from the next update on.'));
   }
   log('');
-  log(chalk.bold.green('  ✔  Update complete!') + chalk.dim(`  (MCP config untouched; branch ${ref})`));
+  log(chalk.bold.green('  ✔  Update complete!') + chalk.dim(`  (branch ${ref})`));
   log('');
   return { ok: true, status: 'updated' };
 }

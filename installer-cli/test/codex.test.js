@@ -18,6 +18,7 @@ test('buildWeeglooMcpToml writes no token: weegloo-upload gets a per-call upload
   assert.ok(toml.includes('[mcp_servers.weegloo-upload.env]'));
   assert.ok(toml.includes('UPLOAD_API_URL = "https://upload.weegloo.com/v1"'));
   assert.ok(!toml.includes('AUTH_BEARER_TOKEN'), toml);
+  assert.ok(toml.includes('"weegloo-upload@latest"]'), 'launched by tag, so npx re-resolves it');
 });
 
 test('Codex project instructions and skills use auto-discovered paths', () => {

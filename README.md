@@ -142,7 +142,7 @@ Register the two MCP servers by hand in that agent's MCP configuration and sign 
     },
     "weegloo-upload": {
       "command": "npx",
-      "args": ["-y", "weegloo-upload"],
+      "args": ["-y", "weegloo-upload@latest"],
       "env": {
         "UPLOAD_API_URL": "https://upload.weegloo.com/v1"
       }

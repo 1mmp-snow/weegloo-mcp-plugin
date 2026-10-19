@@ -40,7 +40,7 @@ npx weegloo@latest --agent <agent> --location <scope> --update
 | 선택 보존 | `selected` = **per-agent 기록이 권위**, 디스크는 기록 부재 시 fallback | 기록은 정확히 이 용도로 만든 메타데이터. 손삭제는 내용 손상과 같은 **드리프트 → 복구**(선택 해제의 공식 채널은 설치 체크박스). 초기 설계는 "디스크가 진실"이었으나 검증 중 사용자 지적으로 전환 — 내용은 수리하면서 존재는 의도로 보는 비일관 + 실수 삭제의 조용한 영구화가 문제. 레거시 flat 기록은 타 에이전트 선택이 섞여 **선택 소스로 절대 불가**(정리-diff 전용) → 마이그레이션 케이스만 디스크 fallback |
 | 신규 판별 | 기록에 **카탈로그(`available*`) 스냅샷** 추가 | "선택한 것"만으로는 (a) 진짜 신규 vs (b) 사용자가 뺀 것을 **구분 불가** — 매니페스트에 항목별 추가시점 메타데이터 없음(항목=id+content뿐), 버전은 불투명 해시라 순서 비교 불가. "그때 제공됐던 목록"이 유일한 판별 키 |
 | 설치 동작 | **불변** (비대화=전체, 대화형=체크박스) | 신규 설치 UX 유지. 단 기록만 확장(`available*`, `ref`) |
-| MCP | **안 건드림** (`--update`는 skills/rules만) | 원격 `weegloo` MCP는 항상 최신(재설치 무의미), `weegloo-upload`는 npx라 실행 시 최신 → 토큰 불필요, 완전 무인 가능 |
+| MCP | **한 가지만 고침** — 기존 `weegloo-upload` 항목의 bare `weegloo-upload` 인자를 `weegloo-upload@latest`로 (항목 추가·토큰 없음) | 원격 `weegloo` MCP는 항상 최신(재설치 무의미). `weegloo-upload`는 npx라도 **bare 이름이면 첫 캐시를 영원히 재사용**한다(npm 9 libnpmexec는 `*` 범위를 캐시된 아무 버전에나 매치) — `@latest` 태그여야 실행마다 레지스트리를 확인한다. 토큰 불필요, 완전 무인 가능 |
 | 코어 룰 | **`weegloo-version` + `weegloo-terms-consent` 강제** (선행 태스크) | `weegloo-version`: 자기참조 — 빠지면 업데이트 노티 자체가 사라져 복구 경로가 구조적으로 죽음. `weegloo-terms-consent`: 약관 게이트가 클라이언트(룰) 측 집행이라 빠지면 게이트 소멸 — 운영 결정. `weegloo-global-rules`는 구조적 필연이 없어(품질 선호일 뿐) **강제하지 않음** |
 | 마이그레이션 | 기존 사용자 **전체설치 1회 감수** | 기존 룰에 박힌 옛 커맨드(install 폼)가 새 인스톨러로 1회 전체 설치 → 선택 리셋. 이를 막으려면 비대화 install 경로도 수정해야 하나 범위 대비 이득이 작아 기각 |
 

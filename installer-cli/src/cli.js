@@ -289,7 +289,7 @@ export function resolveConfig({ values, env = {}, isTTY = true, pkgPluginRef = '
   if (update) {
     if (origins != null) {
       // Ignoring would be a FALSE SUCCESS: the user asked for an environment change, and an
-      // update cannot deliver it (it never touches MCP config) — unlike a superfluous --token,
+      // update cannot deliver it (it never rewrites MCP endpoints) — unlike a superfluous --token,
       // which is warn-and-ignore because ignoring it still yields exactly what was asked.
       errors.push(
         '--origins cannot be combined with --update (updates reuse the mapping recorded at install; to change environments, reinstall with --origins).'

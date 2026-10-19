@@ -32,7 +32,7 @@ Run with no options for the interactive installer. **Any option below pre-fills 
 | `--ignore-rule` | Do not install Rules. |
 | `--origins <file>` | Origins mapping (JSON file or inline JSON) for a staging or enterprise stack (see [Origins mapping](#origins-mapping-staging--enterprise)). Also reads `WEEGLOO_ORIGINS`. Install only. |
 | `--country <cc>` | ISO 3166-1 alpha-2 country code (e.g. `KR`, `US`) that decides which country-specific skills/rules install (see [Country-specific skills and rules](#country-specific-skills-and-rules)). Default: detected from your network at install; `--update` keeps the country the install recorded. Also reads `WEEGLOO_COUNTRY` (the flag wins). Ignored by `--uninstall`. |
-| `--update` | Update an existing install's skills/rules, keeping your selection (see [Updating](#updating)). Requires `--agent`; never touches MCP config, so no token. |
+| `--update` | Update an existing install's skills/rules, keeping your selection (see [Updating](#updating)). Requires `--agent`; needs no token (its only MCP edit is switching a bare `weegloo-upload` launch to `@latest`). |
 | `-u, --uninstall` | Remove an install and restore the pre-install state (see [Uninstalling](#uninstalling)). Works offline; no token. Interactive by default; with `-y` it needs `--agent`. |
 | `-y, --yes` | Non-interactive: use defaults for anything not given. |
 | `--all-branches` | Show all branches in the version picker (interactive only). |
@@ -115,11 +115,17 @@ This is the command the installed `weegloo-version` rule shows when a newer vers
 - **auto-adds genuinely new items** — things that did not exist in the catalog when you last installed. Items you deliberately deselected stay out.
 - **prunes upstream-deleted items**, and always restores the core rules (`weegloo-version`, `weegloo-terms-consent`).
 - **stays on your branch** — read from the install's stamp (`ref`), not defaulted to `latest`. Pass `--branch` only to deliberately switch branches.
-- **never touches MCP config**, so no token is needed and it runs unattended (no `--yes`). The one interactive question is the rare shared-file conflict when multiple agents in one project sit on different branches/origins/countries.
+- **leaves MCP config alone except for one fix**: an existing `weegloo-upload` entry that launches the bare package name is switched to `weegloo-upload@latest` (see [Why `weegloo-upload@latest`](#why-weegloo-uploadlatest)). Nothing is added and no token is needed, so it runs unattended (no `--yes`). The one interactive question is the rare shared-file conflict when multiple agents in one project sit on different branches/origins/countries.
 - reapplies the [origins mapping](#origins-mapping-staging--enterprise) recorded at install time. `--update --origins` is rejected — changing environments is a reinstall.
 - **keeps the country** the install was filtered with (see [Country-specific skills and rules](#country-specific-skills-and-rules)); `--update --country <cc>` changes it.
 
 If nothing is installed for that agent/scope, `--update` is a no-op with a pointer to the install command (it never silently installs everything).
+
+### Why `weegloo-upload@latest`
+
+Every agent's `weegloo-upload` server is launched as `npx -y weegloo-upload@latest`. With the bare name (`npx -y weegloo-upload`, what older installs wrote) npx reuses the copy it cached on that machine's first launch and never asks the registry for a newer one, so the server stays on that version indefinitely — restarting, reconnecting or re-authenticating only relaunches the same cached copy. The `@latest` tag makes npx resolve it against the registry on each launch.
+
+An install writes `@latest`, and `--update` switches an existing bare entry to it — so an install made before the switch is fixed by its next update (or by reinstalling). The new launch takes effect when the agent restarts its MCP servers (a new session).
 
 ## Uninstalling
 

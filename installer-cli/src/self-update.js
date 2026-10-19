@@ -79,9 +79,10 @@ export const VERSION_CHECK_INTERVAL_HOURS = 4;
  * The exact command the rule tells the user to run to update. Deliberately MINIMAL:
  * `weegloo@latest` pins the INSTALLER to its newest release; `--update` runs the update flow,
  * which — unlike an install — preserves the user's skill/rule selection (from the per-agent
- * record), auto-adds genuinely new items, prunes upstream-deleted ones, and never touches MCP
- * config (so no token). No `--branch`: the update reads the branch from the agent's own stamp
- * `ref` (falling back to latest), so the command needs no per-branch variant — `--branch` stays
+ * record), auto-adds genuinely new items, prunes upstream-deleted ones, and touches MCP config
+ * only to switch a bare `weegloo-upload` launch to `@latest` (so no token). No `--branch`: the
+ * update reads the branch from the agent's own stamp `ref` (falling back to latest), so the
+ * command needs no per-branch variant — `--branch` stays
  * available as an explicit override / branch switch. No `--yes`: update mode has nothing to
  * prompt for, and suppressing prompts would also mute the rare shared-store conflict question
  * a human at a TTY should get to answer.
