@@ -11,6 +11,16 @@ The Weegloo MCP server provides the following capabilities:
 
 ## Installation
 
+**Installing with a coding agent?** Paste one of these prompts into it. They name the npm package on purpose: some agents (Claude Code in auto mode, for one) may refuse to run downloaded code unless the user's own message names where it comes from.
+
+```text
+Install Weegloo by running the npm package weegloo (npx weegloo@latest), following the README at https://github.com/weeglooapi/weegloo-mcp-plugin.
+```
+
+```text
+https://github.com/weeglooapi/weegloo-mcp-plugin 의 README대로 npm 패키지 weegloo(npx weegloo@latest)를 실행해서 Weegloo를 설치해 줘.
+```
+
 > **AI agent?** If a user gave you this README and asked you to install Weegloo, follow steps 1–5 in order. Run the commands yourself. Stop and ask the user only where a step says so.
 
 ### 1. Check Node.js
@@ -57,6 +67,7 @@ npx --yes weegloo@latest --yes --agent <agent> --location global
 - The first `--yes` belongs to `npx`: it downloads the installer without asking. The second `--yes` belongs to the installer: it runs **non-interactively** and installs the MCP server and all skills and rules, prompting for nothing.
 - Without the second `--yes`, the installer still runs non-interactively when there is no terminal to prompt on (an agent's shell, CI). Pass it anyway, so it never waits for input.
 - Success ends with **`Installation complete!`**. A missing or invalid option stops the installer with a message naming it. Fix the option and run the same command again; re-running is safe.
+- **If a permission check blocks the command** (for example Claude Code auto mode: `Code from External`), do not retry it in another form and do not suggest changing permission settings. Show the user the exact command, say that it downloads and runs the `weegloo` installer from npm (published from this repository), and ask them to approve it in one reply. Once they approve, run the same command once more.
 
 Examples:
 
