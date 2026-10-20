@@ -148,10 +148,14 @@ cap **2**; retries only on status ≥ 400), `ignoreStatusCode` (default `false`)
   allowed inside `Loop`/`ResourceForEach`**.
 - **`EmailSend`** — one email through a registered **`EmailAccount`** (`weegloo-send-email`).
   `account` (`{ sys: { id } }`), **`to` XOR `toServiceUser`** (exactly one; `to` is a **single
-  address**, `toServiceUser` is `{ sys: { id } }`), `cc?`/`bcc?` (**arrays**), `subject`, `body`,
-  `replyTo?`, `timeoutMs?` (cap **30s**); recipients (`to`+`cc`+`bcc`) cap at **50**. The **sender
-  comes from the account**, not the statement. **`body` is always `text/html`** — use `<br>`/`<p>`,
-  and interpolated values are **HTML-escaped**. `subject`/`replyTo`/addresses **reject CR·LF**.
+  address**, `toServiceUser` is `{ sys: { id } }`), `cc?`/`bcc?` (**arrays**), `subject`, **`body`
+  or `templateBody`**, `autoEscape?`, `replyTo?`, `timeoutMs?` (cap **30s**); recipients
+  (`to`+`cc`+`bcc`) cap at **50**. The **sender comes from the account**, not the statement. **The
+  body is always `text/html`** — use `<br>`/`<p>`; values resolved into it are **HTML-escaped**
+  unless **`autoEscape: false`** (to render trusted HTML, e.g. an admin-written newsletter).
+  **`templateBody`** renders an editable template kept in a Content field, its placeholders filled
+  from `data` — a Content's HTML pointed at from `body` arrives escaped, tags as text.
+  `subject`/`replyTo`/addresses **reject CR·LF**.
   **Binds nothing, takes no `name`**; failure **throws with no retry** — catch with `Try`.
   ⚠️ **Never `Return` the SMTP error verbatim** — it quotes the refused address, which on a
   `toServiceUser` send **leaks a member's email**.
@@ -270,12 +274,13 @@ Any string value may embed a pointer. Roots:
 name**, so where keys belong to your data an operator needs a **`$` prefix**:
 
 - **Data slots** — `fields` (Create/Update/Patch) · `Http.body` · `Return.value` · `SetVar.value` ·
-  `Cache.value`/`defaultValue`: a key without `$` is **always a field name**; operators **must** use
-  `$`.
+  `Cache.value`/`defaultValue` · `EmailSend.templateBody.data`: a key without `$` is **always a field
+  name**; operators **must** use `$`.
 - **Expression slots** — `If.condition` · `Loop.while` · `version`: the whole value is an expression,
   so bare and `$` both work.
 - **Template slots** — everything else (`url`, `headers[].value`, `locale`, `order`, `over`,
-  `target.sys.id`, `EmailSend.*`, `ParseJson.value`): plain strings, only `{ /pointer }` applies.
+  `target.sys.id`, the other `EmailSend` fields, `ParseJson.value`): plain strings, only
+  `{ /pointer }` applies.
 - Nested operators inside a `$` operation need no `$`. **When unsure, prefix every operator with
   `$`** — correct in every slot.
 
