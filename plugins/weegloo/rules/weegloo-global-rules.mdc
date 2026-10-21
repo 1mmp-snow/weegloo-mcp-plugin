@@ -100,7 +100,7 @@ rules:
     items:
       - "**Every read of Content or Media names the fields it needs** — `select=sys.id,fields.title`, on **every** list call. Not a tuning tip for when something feels slow; it is how a read is written, and an unprojected read is the exception that needs a reason."
       - "**This binds YOUR OWN calls, not just code you generate.** `select` is a parameter on the `mcp__weegloo__cma_GetList*` tools. A bare `GetListContents` returns whole documents — every locale bucket of every field of every row — into your context window, where it displaces the actual task. Nothing truncates it for you."
-      - "**One `select` per request, paths comma-separated** (`order` likewise) — do not repeat the key. Recipes, include/exclude modes, keeping `order` keys projected and `sys.id[in]` batching: **`weegloo-api-query-optimization`**."
+      - "**One `select` per request, paths comma-separated** (`order` likewise) — do not repeat the key. **Every `order` key must also be in `select`** (`order=-sys.createdAt` ⇒ `select=…,sys.createdAt`), or the call fails. Recipes, include/exclude modes and `sys.id[in]` batching: **`weegloo-api-query-optimization`**."
 
   - section: Searching `fields.*` — Advanced Search is required
     items:

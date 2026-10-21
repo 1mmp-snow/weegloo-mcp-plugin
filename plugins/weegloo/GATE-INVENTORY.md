@@ -91,6 +91,7 @@ wrong result?*
 - `the flat /contents paths do not exist there (404)` — The instinctive repair after the 404 is to conclude ACMA is broken or to retry the CMA-shaped path, instead of resolving the ContentType.
 - `References are NEVER embedded.` — `fields.image` holds a stub, so the rendered src is undefined — a broken image with no error anywhere.
 - `A bare GetListContents returns whole documents` — The call succeeds; every locale bucket of every field lands in the context window and displaces the task, with nothing truncating it.
+- `Every order key must also be in select` — The projection rule above makes every list call carry `select`, and the usual newest-first `order=-sys.createdAt` is left out of it, so the call fails; while this lived only behind the skill pointer, the agent's own `cma_GetList*` calls kept hitting it, and generated app code ships the same failing request.
 - `returns an empty list rather than an error` — A substring search without the Advanced Search header answers 200 with zero rows, which reads as "no matches".
 - `there is no index for fields., so that part degrades into a scan` — The query passes against seed data and times out in production as the Space fills up.
 - `fall back to filtering in memory` — Filtering the loaded page returns plausible results while silently missing every row not yet fetched.
