@@ -149,6 +149,17 @@ git worktrees.
 - **forbidden**: `^(?![^\n]*\bCMA\b)[^\n]*\*\*ContentType\*\*, \*\*Content\*\* and \*\*Media\*\* support partial updates` — the phrasing that was there: present in 1 file(s) at `c6397c1`, 0 after the fix. `tests/fact-owners-control.mjs` re-checks that it still fires on that commit — a pattern matching nothing passes the suite exactly like a correct one.
 - **why**: The rule listed all three under a section headed "CMA / ACMA" with no plane qualifier, so an ACMA Media PATCH returns 404/405 — which this corpus separately teaches to read as a wrong path or a missing row, sending the agent to debug the URL instead of the plane.
 
+### media-patch-metadata-only
+
+- **fact**: A Media PATCH edits only `title` / `description`, never the file (`/fields/file/…` is `400 WEB400011`); a file is replaced by a PUT whose `file.{locale}.upload` points at a new Upload, which keeps the Media's `sys.id`.
+- **owner**: `skills/weegloo-cma-json-patch/SKILL.md`
+- **canary**: `PATCH edits metadata only, never the file`
+- **mentions**: `only .title. / .description.`
+  - `rules/weegloo-api-endpoints.mdc`
+  - `rules/weegloo-global-rules.mdc`
+  - `skills/weegloo-cma-json-patch/SKILL.md`
+- **why**: The always-loaded rules sent every partial Media edit to PATCH without qualification, so a file swap was PATCHed onto `/fields/file/{locale}` and refused `WEB400011` *Invalid patch request* — an error that names no cause. Settled against the CMA Media reference: PATCH edits metadata "without reattaching the file", and PUT reattaches it only with an `upload` reference to a new Upload.
+
 ### locale-presence-scoped-by-required
 
 - **fact**: Create-time locale presence is scoped by the field's `required` flag, not by whether the field is populated: a required field needs every non-optional locale, a non-required one has no requirement.
