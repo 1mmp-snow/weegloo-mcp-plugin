@@ -160,6 +160,18 @@ git worktrees.
   - `skills/weegloo-cma-json-patch/SKILL.md`
 - **why**: The always-loaded rules sent every partial Media edit to PATCH without qualification, so a file swap was PATCHed onto `/fields/file/{locale}` and refused `WEB400011` *Invalid patch request* — an error that names no cause. Settled against the CMA Media reference: PATCH edits metadata "without reattaching the file", and PUT reattaches it only with an `upload` reference to a new Upload.
 
+### patch-no-test-op
+
+- **fact**: A Weegloo PATCH takes the JSON Patch ops `add` / `remove` / `replace` / `move` / `copy` only; `test` is refused `400 WEB400019` (`details.op: Not supported operation`) on every resource, MCP tool or HTTP alike. A precondition is a read plus `X-Weegloo-Version`, not a `test` op.
+- **owner**: `rules/weegloo-global-rules.mdc`
+- **canary**: `refused on EVERY Weegloo PATCH`
+- **mentions**: `WEB400019|never the .test. op`
+  - `rules/weegloo-api-endpoints.mdc`
+  - `rules/weegloo-global-rules.mdc`
+  - `skills/weegloo-cma-json-patch/SKILL.md`
+- **forbidden**: `RFC 6902 JSON Patch\*\*(?![^\n]{0,40}\btest\b)` — the always-loaded phrasing with no exception beside it: present in 1 file(s) at `3f1c697`, 0 after the fix. `tests/fact-owners-control.mjs` re-checks that it still fires on that commit.
+- **why**: The exception lived only in the skill spine, while both always-loaded rules said "RFC 6902 JSON Patch" with nothing beside it — which licenses every op the RFC defines. An agent PATCHing a ContentType over MCP added a `test` op and got `400 WEB400019` whose only detail is `op: Not supported operation`.
+
 ### locale-presence-scoped-by-required
 
 - **fact**: Create-time locale presence is scoped by the field's `required` flag, not by whether the field is populated: a required field needs every non-optional locale, a non-required one has no requirement.

@@ -72,6 +72,9 @@ const DEFECT_AT = {
   // `32c6442` is `d15d1c8`'s parent: its job recipe still gave the user `Edit` on their own job rows
   // under `":self"` and called a completed job unforgeable; `d15d1c8` withdrew the grant.
   'script-writes-attributed-to-executor': '32c6442',
+  // `3f1c697` is the merge just before develop's `a1ed2f1` tip: its api-endpoints rule still says
+  // "RFC 6902 JSON Patch" with no word about the unsupported `test` op.
+  'patch-no-test-op': '3f1c697',
 };
 
 const NOT_CORPUS = new Set(['FACT-OWNERS.md', 'GATE-INVENTORY.md']);
