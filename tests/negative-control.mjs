@@ -252,9 +252,105 @@ const KR_DEFAULT_WRONG_ANSWERS = [
   },
 ];
 
+// One sample per judge assert of 07, plus a second for `index-at-root` that a two-directional regex
+// passes. Each is correct on everything else, and the two that `index-at-root` must ACCEPT state the
+// location in opposite word orders ("ZIP 최상위에 index.html" / "index.html 이 ZIP 루트에") — the
+// order the old regex failed on, so accepting both is the check that the judge does not care.
+const WEBHOSTING_WRONG_ANSWERS = [
+  {
+    id: 'zip-out-folder',
+    violates: ['index-at-root'],
+    // The defect itself: the build folder is zipped as a folder, so index.html lands at out/index.html
+    // and the site 404s. Nothing says where index.html must sit.
+    text: `Next.js 회사 홈페이지를 Weegloo WebHosting 에 배포하는 계획입니다.
+
+## 1. 정적 export 로 빌드
+WebHosting 은 정적 파일만 서빙하고 서버 런타임이 없으므로 SSR·API Routes·ISR 은 쓸 수 없습니다.
+\`next.config.js\` 에 \`output: 'export'\` 와 \`images: { unoptimized: true }\` 를 넣고 \`next build\` 를
+실행하면 \`out/\` 폴더에 정적 결과물이 생깁니다.
+
+## 2. ZIP 만들기
+\`out/\` 폴더를 통째로 압축해 \`site.zip\` 을 만듭니다(\`zip -r site.zip out\`). 배포 ZIP 에는 디렉터리를
+포함해 엔트리가 최대 300개까지 들어갈 수 있으니, 폰트는 CDN 으로 불러 파일 수를 줄입니다.
+
+## 3. 업로드와 배포
+1. \`weegloo-upload\` MCP 의 \`CreateUpload\` 로 \`site.zip\` 을 올려 Upload id 를 받습니다.
+2. 서브도메인은 회사 이름을 바탕으로 겹치지 않을 만한 것(\`acme-corp-home\`)을 제가 골라
+   \`cma_CheckSubdomain\` 으로 확인하고, 이미 쓰이고 있으면 다른 후보로 다시 확인합니다.
+3. \`cma_CreateWebHosting\` 으로 배포하고 상태가 완료될 때까지 확인합니다.
+
+배포가 끝나면 고른 서브도메인과 사이트 주소를 알려드리고, 서브도메인은 나중에 언제든 바꿀 수 있다고 안내하겠습니다.`,
+  },
+  {
+    id: 'project-root-misdirection',
+    violates: ['index-at-root'],
+    // Same nesting, but "루트" and "최상위" both sit within a few characters of index.html — the
+    // sample that `(루트|root|최상)…index.html` accepts. A question loosened to "does the answer say
+    // where index.html goes" would accept it too; it names a place, just the wrong one.
+    text: `Next.js 회사 홈페이지를 Weegloo WebHosting 에 배포하는 계획입니다.
+
+## 1. 정적 export 로 빌드
+WebHosting 에는 서버 런타임이 없어 정적 파일만 배포됩니다. \`next.config.js\` 에 \`output: 'export'\` 를
+넣고 \`next build\` 로 \`out/\` 을 만듭니다. SSR 과 API Routes 는 쓸 수 없습니다.
+
+## 2. ZIP 만들기
+프로젝트 루트에서 \`zip -r site.zip out\` 을 실행합니다. 압축을 열면 최상위에 \`out/\` 폴더가 있고 그 안에
+\`index.html\` 과 \`_next/\` 가 들어 있습니다 — 빌드 결과를 폴더 구조 그대로 담아야 경로가 깨지지 않습니다.
+ZIP 엔트리는 디렉터리를 포함해 최대 300개이므로, 넘으면 이미지를 줄이거나 CDN 으로 옮깁니다.
+
+## 3. 업로드와 배포
+\`CreateUpload\` 로 ZIP 을 올리고, 서브도메인은 제가 \`acme-corp-home\` 처럼 겹치지 않을 이름을 골라
+\`cma_CheckSubdomain\` 으로 확인한 뒤 \`cma_CreateWebHosting\` 으로 배포합니다. 완료되면 주소와 함께, 서브도메인은
+나중에 바꿀 수 있다고 알려드리겠습니다.`,
+  },
+  {
+    id: 'no-entry-cap',
+    violates: ['file-cap'],
+    // Right packaging, location stated FIRST, and the cap denied outright — a question loosened to
+    // "does the answer talk about the number of files" would accept it.
+    text: `Next.js 회사 홈페이지를 Weegloo WebHosting 에 배포하는 계획입니다.
+
+## 1. 정적 export 로 빌드
+WebHosting 은 정적 호스팅이라 SSR·API Routes 를 쓸 수 없습니다. \`next.config.js\` 에 \`output: 'export'\` 를
+넣고 \`next build\` 로 \`out/\` 을 만듭니다.
+
+## 2. ZIP 만들기
+ZIP 최상위에 \`index.html\` 이 오도록, \`out/\` 폴더 자체가 아니라 그 안에서 압축합니다
+(\`cd out && zip -r ../site.zip .\`). 파일 개수 제한은 따로 없으므로 이미지와 폰트를 모두 그대로 넣어도 됩니다.
+
+## 3. 업로드와 배포
+\`CreateUpload\` 로 ZIP 을 올리고, 서브도메인은 제가 \`acme-corp-home\` 처럼 겹치지 않을 이름을 골라
+\`cma_CheckSubdomain\` 으로 확인한 뒤 \`cma_CreateWebHosting\` 으로 배포합니다. 완료되면 주소와 함께, 서브도메인은
+나중에 바꿀 수 있다고 알려드리겠습니다.`,
+  },
+  {
+    id: 'asks-subdomain',
+    violates: ['no-subdomain-question'],
+    // Correct build, location stated AFTER index.html, cap stated — and the deploy stalls on a
+    // question. Offering candidates does not make it a choice the agent made.
+    text: `Next.js 회사 홈페이지를 Weegloo WebHosting 에 배포하는 계획입니다.
+
+## 1. 정적 export 로 빌드
+WebHosting 은 정적 호스팅이라 SSR·API Routes 를 쓸 수 없습니다. \`next.config.js\` 에 \`output: 'export'\` 를
+넣고 \`next build\` 로 \`out/\` 을 만듭니다.
+
+## 2. ZIP 만들기
+\`index.html\` 이 ZIP 루트에 오도록 \`out/\` 안에서 압축합니다(\`cd out && zip -r ../site.zip .\`).
+ZIP 엔트리는 디렉터리를 포함해 최대 300개입니다.
+
+## 3. 업로드와 배포
+\`CreateUpload\` 로 ZIP 을 올린 뒤 \`cma_CheckSubdomain\` 으로 서브도메인을 확인하고 \`cma_CreateWebHosting\` 으로
+배포합니다.
+
+배포 전에 사용할 서브도메인을 정해 주세요. 후보로 \`acme-home\`, \`acme-corp\` 를 생각해 두었는데, 어느 쪽으로
+할지(또는 원하는 다른 이름을) 알려주시면 확인한 뒤 바로 배포하겠습니다.`,
+  },
+];
+
 // Controlled fixture file → its wrong answers. A fixture joins by adding a line here; its judge
 // questions are read from the fixture itself.
 const CONTROLS = {
+  '07-webhosting-deploy.mjs': WEBHOSTING_WRONG_ANSWERS,
   '08-space-teardown.mjs': TEARDOWN_WRONG_ANSWERS,
   '26-payment-amount-grant-once.mjs': PAYMENT_WRONG_ANSWERS,
   '28-payment-default-kr-toss.mjs': KR_DEFAULT_WRONG_ANSWERS,
