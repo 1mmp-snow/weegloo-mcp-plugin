@@ -10,7 +10,15 @@ export default {
   asserts: [
     { id: 'static-export', kind: 'must_match', pattern: /정적|static|export|SSR\s*(불가|안|없|미지원)/i,
       why: 'WebHosting 에는 서버 런타임이 없다 — 정적 export 만 배포된다' },
-    { id: 'index-at-root', kind: 'must_match', pattern: /index\.html[\s\S]{0,60}(루트|root|최상)/i,
+    // Was a regex requiring 루트/root/최상 within 60 chars AFTER index.html. Measured at 5/6 and
+    // 6/10 (a963553), then 5/7 and 8/11 on an unchanged KR corpus: every failure whose response
+    // could be read was correct but named the location FIRST — "ZIP 최상위에 index.html 이 오게".
+    // Allowing both word orders is not enough either: on ten more correct answers it passed 8 (the
+    // old one 4) — "ZIP 맨 위에 index.html" names no word on its list — and it passes "프로젝트 루트에서
+    // `zip -r site.zip out` … 최상위에 out/ 폴더가 있고 그 안에 index.html", which nests it — the
+    // exact defect. So the criterion is judged rather than matched, like file-cap below.
+    { id: 'index-at-root', kind: 'judge', expect: 'yes',
+      question: 'Does the answer make sure index.html ends up at the top level (root) of the uploaded ZIP, not nested inside a folder such as out/ — whether by stating that requirement or by packaging steps that zip the build folder\'s contents rather than the folder itself?',
       why: 'ZIP 루트에 index.html 이 없으면 사이트가 뜨지 않는다' },
     // Was a regex requiring 300/100 within 40 chars of 파일/files/개. Measured at ~4/6 across
     // repeated runs on an unchanged corpus: the agent states the cap correctly every time but
