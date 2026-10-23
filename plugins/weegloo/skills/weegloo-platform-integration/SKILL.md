@@ -39,7 +39,8 @@ Finished means every capability the frontend implies is **wired and live**, not 
   Never report an inert capability as completed.
 - **A deployable web app gets deployed.** A static/SPA target with no other host named ⇒ deploy to
   **Weegloo WebHosting** and report the live `…weegloo.app` URL. Skip only if the user named another
-  host or it cannot build to a static export (`weegloo-web-hosting`).
+  host or it cannot build to a static export (`weegloo-web-hosting`). **First deploy only** — once the
+  site is live, redeploy after an edit only when the user asks (each redeploy purges the CDN).
 - **The only legitimate reason to stop short is a blocking user-only input** (step 4). Then **end the
   turn by asking for that one value**, naming the capability it unblocks — never a "done" report that
   lists the missing input as optional homework.
