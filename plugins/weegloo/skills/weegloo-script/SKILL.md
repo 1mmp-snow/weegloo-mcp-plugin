@@ -78,7 +78,8 @@ binding `name` must match `^[a-zA-Z0-9_-]+$`, be unique, and not shadow a reserv
 
 On resource statements **`resource`** is **`Content` | `Media`**, plus two narrow cases:
 **`ServiceUser`** takes the read statements plus `ResourceUpdate`/`ResourcePatch` of its
-`roleOverride` and `enableLogin` — nothing else (needs the `SETTING_SERVICE_LOGIN` permission)
+`roleOverride` and `enableLogin` — nothing else, and **no `publish` / `propagateEvents`** (both
+rejected at save) (needs the `SETTING_SERVICE_LOGIN` permission)
 and **`ContentType`** is **countable only** (`ResourceCount`; anything else is rejected at save).
 
 **A Content statement that does not address its target by id must name the ContentType it works
@@ -219,8 +220,8 @@ All reads take **`from`**: **`Current`** (live draft, what CMA/ACMA read; **defa
 | `fields` | Create/Update/Patch | field-key → value. With `locale` **set**, each value is a **bare** value for that locale; with `locale` **omitted**, each value must be an explicit **`{ "<locale>": value }` map** (a non-map ⇒ `400`). **Media** keys are fixed: `title`/`description` (scalar) and `file` = a `{ source, encoding, transformations? }` ingest directive. `locale → null` **deletes** that bucket. |
 | `locale` | Create/Update/Patch | literal code **or** value expression. Omitting it does **not** default to the space locale. |
 | `version` | Update/Patch/Publish/Unpublish/Archive/Unarchive | **optimistic lock** (→ Int): the write applies only if `sys.version` matches; a mismatch aborts with a catchable conflict error. Omit ⇒ no check. |
-| `publish` | Create/Update/Patch | **default `true`** — publish after the write so CDA/ACDA deliver it; `false` keeps a draft. |
-| `propagateEvents` | **every write** | **default `false` — a Script's writes are SILENT**: no `EntityEvent`s, so **search indexing and Webhooks do NOT fire**. Set `true` per action when a write must index the row or trigger other Webhooks. |
+| `publish` | Content/Media Create/Update/Patch | **default `true`** — publish after the write so CDA/ACDA deliver it; `false` keeps a draft. |
+| `propagateEvents` | **every Content/Media write** | **default `false` — a Script's writes are SILENT**: no `EntityEvent`s, so **search indexing and Webhooks do NOT fire**. Set `true` per action when a write must index the row or trigger other Webhooks. |
 
 **Media ingest** — `fields.file.{locale} = { "source": "…", "encoding": "url" | "base64" }` on a Media
 `ResourceCreate` / `ResourceUpdate` (re-ingests the listed locales) / `ResourcePatch` (just the named
