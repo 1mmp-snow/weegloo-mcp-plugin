@@ -13,6 +13,8 @@ description: Use before any deploy to Weegloo WebHosting. Static-only (max 300 f
   reporting the live `…weegloo.app` URL — is part of *completing* the integration, not an optional
   extra. **Do not leave the app running only locally.** Skip the deploy only if the user specified
   another host, or the app genuinely cannot build to a static export.
+- **That covers the FIRST deploy only.** Once the site is live, redeploy after an edit only when the
+  user explicitly asks — every redeploy purges the CDN, which is costly.
 
 ## MANDATORY: MCP Tools Only
 

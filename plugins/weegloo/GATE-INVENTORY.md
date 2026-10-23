@@ -163,6 +163,10 @@ wrong result?*
 - `never on non-Weegloo work` — Nothing errors if the check runs during unrelated coding; it just injects a fetch and possibly an update nag into work that has no Weegloo involvement.
 - `an ISO-8601 LOCAL timestamp` — Writing the stamp in UTC while comparing against local time (or vice versa) shifts the interval by the timezone offset — the throttle silently fires early or never, with a perfectly well-formed file.
 
+## weegloo-web-hosting-rules
+
+- `Redeploy only when the user explicitly asks` — Without it the agent redeploys after every edit: each redeploy succeeds and reads as diligent completion, while every `UpdateOneWebHosting` upload purges the CDN — a recurring cost the agent never sees and nothing reports.
+
 ## Untouched by design
 
 weegloo-terms-consent, weegloo-web-hosting-rules and weegloo-default-locale were not compressed:
