@@ -44,7 +44,7 @@ A **Webhook** reacts to **Space events**. On a matching event it performs **exac
 | `url` | external endpoint — **mutually exclusive with `script`** |
 | `script` | `Refer` → a Script to run instead of the URL — **mutually exclusive with `url`** |
 | `headers` | 0–30 `WebhookHeader`s; mark auth/keys as **`secret: true`** (encrypted at rest) |
-| `httpBasicUsername` / `httpBasicPassword` | optional Basic auth for the URL path |
+| `basicAuth` | optional Basic auth for the URL path: `{ "username", "password" }`. `password` is never returned — on PUT send `username` alone to keep it, omit or `null` to remove; on PATCH set it with `add`, not `replace` |
 | `transformation` | **required** object that shapes the outbound URL request (its members all default, so `{}` suffices): `method` (GET/POST/PUT/DELETE/PATCH, default POST), `contentType`, `body` (JSON-Pointer templating like `{ /payload/sys/id }`), `includeBody` (default `true`) |
 | `runAs` | **`HookOwner`** (default; the webhook's creator) or **`EventUser`** (the user who caused the change) |
 
