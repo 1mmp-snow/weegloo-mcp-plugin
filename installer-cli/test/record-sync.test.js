@@ -141,8 +141,9 @@ test('the record is independent of version-check.json — the rule overwriting t
     const stamp = path.join(root, 'version-check.json');
     writeInstalledRecord(rec, { skills: ['weegloo-a'], rules: ['weegloo-r1'] });
 
-    // Simulate the weegloo-version rule's periodic write: it overwrites version-check.json with
-    // ONLY last_check. The record lives in a different file and must be untouched.
+    // Simulate an older weegloo-version rule's periodic write (the current rule only reads the
+    // stamp): it overwrites version-check.json with ONLY last_check. The record lives in a
+    // different file and must be untouched.
     fs.writeFileSync(stamp, JSON.stringify({ last_check: '2026-08-01' }), 'utf-8');
 
     assert.deepEqual(readInstalledRecord(rec), record({ skills: ['weegloo-a'], rules: ['weegloo-r1'] }));

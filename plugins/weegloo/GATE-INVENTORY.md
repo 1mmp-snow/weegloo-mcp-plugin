@@ -151,17 +151,17 @@ wrong result?*
 
 ## weegloo-version
 
-- `however recent lastcheck looks` — Without it the agent reads a recent last_check written by a previous session, silently skips the check, and the user never learns an update exists — a correct-looking silence that is the exact failure the rule exists to prevent.
+- `however recent lastcheck looks` — Without it the agent reads a recent last_check written by the installer (or by an older rule in another session), silently skips the check, and the user never learns an update exists — a correct-looking silence that is the exact failure the rule exists to prevent.
 - `say nothing when the plugin is up to date` — Without it the agent narrates 'checking version… you are up to date' on every first Weegloo request. No error, plausible-looking output, but it turns a silent background check into recurring noise on unrelated work.
 - `treat it as unknown and run the check` — A missing or unreadable stamp (fresh install, older installer) would otherwise be read as 'nothing to compare' and the agent skips silently — permanently, since the stamp never appears. Fail-open is the only behaviour that ever surfaces an update.
+- `The stamp is READ-ONLY to you` — Without it the agent keeps the old habit of rewriting `last_check` after every check. Nothing reads that value anymore, so the write buys nothing — yet every check prints an Edit diff into the user's session, and every rewrite is another chance to clobber `version` or `ref` below.
 - `Never overwrite version with the value you just fetched` — The instinctive repair — 'I just fetched the current version, write it to the stamp' — makes every subsequent check compare equal and report 'up to date' while the installed files stay old. No error ever appears; the update path dies permanently.
-- `Never drop ref` — Rewriting the stamp as `{last_check, version}` looks like a clean write. `ref` is the branch the agent installed from; losing it silently breaks the update flow for that user with nothing to read as a failure.
+- `Never drop ref` — An agent that rewrites the stamp anyway tends to write `{last_check, version}`, which looks like a clean write. `ref` is the branch the agent installed from; losing it silently breaks the update flow for that user with nothing to read as a failure.
 - `never read an error as "update available."` — A 500 / deleted-branch / offline response has no `version` field; treating that as a mismatch nags the user to run an update command on a check that never actually succeeded.
 - `which counts as an update available, not as a skip` — A stamp with no `version` (install predating version tracking) is exactly the case that most needs updating; 'can't compare, so stay silent' is the plausible-and-wrong reading that leaves the oldest installs never prompted.
 - `Do NOT auto-run it` — The helpful instinct is to just run the npx command. It rewrites the user's installed skills and rules without approval — a destructive side effect presented as a successful check.
 - `take effect only in a NEW session` — Without it the agent tells the user the update is live; the current session still holds the old text, so the user tests against stale rules and concludes the update failed.
 - `never on non-Weegloo work` — Nothing errors if the check runs during unrelated coding; it just injects a fetch and possibly an update nag into work that has no Weegloo involvement.
-- `an ISO-8601 LOCAL timestamp` — Writing the stamp in UTC while comparing against local time (or vice versa) shifts the interval by the timezone offset — the throttle silently fires early or never, with a perfectly well-formed file.
 
 ## weegloo-web-hosting-rules
 

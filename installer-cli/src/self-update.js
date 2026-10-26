@@ -6,7 +6,7 @@
  *     `weegloo-version` rule's text at install time. Rules are auto-loaded into the agent's
  *     context every session, so the agent already knows them — no file read needed for these.
  *
- *  2. Mutable state — WHEN the version was last checked, WHICH version is installed, and from
+ *  2. Mutable state — WHEN the installer last stamped, WHICH version is installed, and from
  *     WHICH branch — lives in a small JSON stamp under .weegloo/<agent>/version-check.json,
  *     at the SAME scope the user installed at (global → ~/.weegloo, project →
  *     <project>/.weegloo). The path is PER-AGENT: installed content is per-agent (claude may
@@ -14,8 +14,9 @@
  *     represent it — one agent's install would silence every other agent's staleness. The rule
  *     checks once per session (on the first Weegloo request) and, in a session that stays
  *     alive past the interval, again every VERSION_CHECK_INTERVAL_HOURS; it compares the
- *     stamp's `version` against the branch-scoped endpoint and rewrites ONLY `last_check`
- *     (preserving `version`, `ref`, and any other field) after a check.
+ *     stamp's `version` against the branch-scoped endpoint. The rule only READS the stamp —
+ *     the installer is its sole writer. (Older rule texts also rewrote `last_check` after each
+ *     check; that write showed up as an Edit diff in every session and nothing read it.)
  *
  * Legacy (pre-per-agent) installs used flat .weegloo/version-check.json + installed.json shared
  * by every agent. Those paths are no longer written: keeping the flat stamp fresh would make
@@ -134,7 +135,8 @@ export function isoNow(now = new Date()) {
 }
 
 /**
- * Stamp payload. `last_check` is the rule's in-session re-check anchor; `version` is the
+ * Stamp payload. `last_check` is when the installer last stamped — the current rule does not
+ * read it, but older installed rule texts still use it as their re-check anchor; `version` is the
  * INSTALLED content version the rule compares against the endpoint; `ref` is the branch this
  * agent installed from — the only structured record of it (the update flow reads it back).
  * null/absent version/ref are omitted (a legacy-shaped stamp stays legacy-shaped).
@@ -163,8 +165,9 @@ function readJsonFile(filePath) {
  * from, and the `last_check` timestamp. Called on every install and update. Best-effort: never
  * throws — a failed stamp must not fail the install. Returns the path written, or null on failure.
  *
- * NOTE: version-check.json is ALSO rewritten by the weegloo-version RULE on each check (it updates
- * `last_check`, preserving every other field). The installed-skills/rules record must NOT live
+ * NOTE: the current weegloo-version rule only READS this stamp, but older rule texts still
+ * installed for other agents rewrite it on each check (they update `last_check`, preserving every
+ * other field). The installed-skills/rules record must NOT live
  * here — it lives in a separate, installer-only file; see getInstalledRecordPath.
  *
  * @param {string} stampPath  absolute stamp path (per-agent — see getVersionStampPath)
@@ -183,7 +186,7 @@ export function writeVersionStamp(stampPath, { now = isoNow(), version = null, r
 
 /**
  * Where the installer records the skills/rules it installed — a file DISTINCT from the
- * version-check.json throttle stamp. The weegloo-version rule overwrites that stamp on every
+ * version-check.json stamp. Older weegloo-version rule texts overwrite that stamp on every
  * check, so keeping the record separate is what lets it survive across update cycles. Same
  * per-agent layout as the stamp: without it, agent B's install would rewrite agent A's record
  * and A's next reconcile would prune rules/skills A still wants (order-dependent deletion).
@@ -348,9 +351,9 @@ export function projectMarkerRuleSharers(agent, cwd = process.cwd()) {
  * so foreign ids are no-ops. The legacy file itself is never written or deleted (other agents'
  * first migrations still need it as their fallback).
  *
- * The record is written to installed.json; the throttle stamp is written to the rule-owned
- * version-check.json. Keeping them in separate files is deliberate — the weegloo-version rule
- * periodically overwrites the stamp, and that must never wipe the record.
+ * The record is written to installed.json; the version stamp is written to version-check.json,
+ * which the weegloo-version rule reads. Keeping them in separate files is deliberate — older rule
+ * texts periodically overwrite the stamp, and that must never wipe the record.
  *
  * `origins` and `country` are written on EVERY call (set, or removed when null): they describe
  * the environment of the run that just happened, not a preference to carry forward. `country` is
