@@ -30,6 +30,8 @@ Successful **list** responses include a **`links`** object (alongside **`items`*
 
 Values are typically **relative** paths starting with **`/v1/...`** (not absolute URLs).
 
+**`totalCount` stops at 500,000.** When it reaches that, the response adds **`totalCountCapped: true`** (absent otherwise): read and show it as "500,000 or more", never as an exact total or a page count. The one exact count past that is a Content list read with **Advanced Search** (`weegloo-api-query-optimization`) — counted by search, with no cap and no flag.
+
 ## How to paginate
 
 1. **First request:** call the list endpoint with your desired **`limit`**, **`order`**, filters, **`select`**, etc. (see OpenAPI - base URLs in **`weegloo-api-endpoints`**).  
