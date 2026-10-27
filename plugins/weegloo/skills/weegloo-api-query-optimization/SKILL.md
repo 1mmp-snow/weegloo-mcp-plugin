@@ -69,10 +69,10 @@ You may select whole nested objects when the API allows it, for example:
 
 ### Interaction with `order`
 
-If the request uses **`order`**, **every sort key** must still be **present** in the projected representation. Sorting relies on those values; **`select`** must not strip them out.
+Every list request is sorted — by **`order`** when you pass it, otherwise by the default **`sys.createdAt,sys.id`** — and **every sort key** must still be **present** in the projected representation. Sorting relies on those values; **`select`** must not strip them out.
 
-- **Include mode:** list every path that appears in **`order`** (or select a **parent** path that still contains those leaf values-confirm behavior in OpenAPI).
-- **Exclude mode:** do **not** prefix any **`order`** path with **`-`** (e.g. if **`?order=sys.id,fields.name`**, avoid **`-sys.id`** or **`-fields.name`** in **`select`**).
+- **Include mode:** list every sort key (or select a **parent** path that still contains those leaf values-confirm behavior in OpenAPI).
+- **Exclude mode:** do **not** prefix any sort key with **`-`** (e.g. if **`?order=sys.id,fields.name`**, avoid **`-sys.id`** or **`-fields.name`** in **`select`**).
 
 Example: **`?order=sys.id,fields.name`** together with **`select`** → keep **`sys.id`** and **`fields.name`** reachable in the response.
 

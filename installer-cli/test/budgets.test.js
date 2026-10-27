@@ -30,7 +30,7 @@ const read = (p) => readFileSync(p, 'utf-8').replace(/\r\n/g, '\n');
  */
 const RULE_CAPS = {
   'weegloo-api-endpoints': 17_700,
-  'weegloo-global-rules': 28_500,
+  'weegloo-global-rules': 28_700,
   'weegloo-minimal-load': 6_300,
   'weegloo-version': 3_600,
   'weegloo-resource-deletion': 4_100,

@@ -182,7 +182,7 @@ Find inbound references yourself before deleting anything that looks linked:
 GET /v1/spaces/{spaceId}/contents
     ?sys.contentType.sys.id=<referring CT id>
     &fields.<referField>.<locale>.sys.id[eq]=<target id>
-    &select=sys.id
+    &select=sys.id,sys.createdAt
 ```
 
 The locale segment is required, and on the flat `/contents` list so is the ContentType scope
